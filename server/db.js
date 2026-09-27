@@ -1,0 +1,398 @@
+/**
+ * SmartCity AI Municipal Database & State Store
+ * In-memory persistence maintaining incidents, linked duplicate reports,
+ * municipal maintenance teams, and active work orders.
+ */
+
+import { calculateRiskScore } from './services/riskEngine.js';
+import { verifyDetection } from './services/verificationEngine.js';
+import { getCurrentWeather } from './services/weatherService.js';
+import { calculateDeteriorationProjection } from './services/predictiveEngine.js';
+
+export const teams = [
+  {
+    team_id: 'TEAM-01',
+    name: 'Road Rapid Patch Alpha',
+    specialization: 'Asphalt & Road Surface',
+    latitude: 8.5220,
+    longitude: 76.9380,
+    current_area: 'Statue Junction Depot',
+    availability: 'AVAILABLE',
+    current_workload: 1,
+    equipment: 'Infrared Asphalt Heater & Compactor',
+    contact_phone: '+91 471 2334001',
+    rating: 4.8,
+  },
+  {
+    team_id: 'TEAM-02',
+    name: 'Heavy Pavement Crew Beta',
+    specialization: 'Asphalt & Road Surface',
+    latitude: 8.5420,
+    longitude: 76.9140,
+    current_area: 'Kazhakkoottam Works Yard',
+    availability: 'AVAILABLE',
+    current_workload: 0,
+    equipment: 'Pavement Milling Machine & 10T Roller',
+    contact_phone: '+91 471 2334002',
+    rating: 4.9,
+  },
+  {
+    team_id: 'TEAM-03',
+    name: 'Stormwater & Drainage Strike Unit',
+    specialization: 'Drainage & Stormwater',
+    latitude: 8.4890,
+    longitude: 76.9490,
+    current_area: 'Thiruvallam Sluice Gate',
+    availability: 'EN_ROUTE',
+    current_workload: 2,
+    equipment: 'High-Pressure Jetting Vacuum Truck (12,000L)',
+    contact_phone: '+91 471 2334003',
+    rating: 4.7,
+  },
+  {
+    team_id: 'TEAM-04',
+    name: 'Solid Waste & Sanitation Response',
+    specialization: 'Sanitation & Solid Waste',
+    latitude: 8.5080,
+    longitude: 76.9440,
+    current_area: 'Chalai Central Depot',
+    availability: 'AVAILABLE',
+    current_workload: 1,
+    equipment: 'Compactor Truck & Mechanical Grapple',
+    contact_phone: '+91 471 2334004',
+    rating: 4.6,
+  },
+  {
+    team_id: 'TEAM-05',
+    name: 'Municipal Electrical & Lighting',
+    specialization: 'Electrical & Illumination',
+    latitude: 8.5310,
+    longitude: 76.9290,
+    current_area: 'Pattom Power Substation',
+    availability: 'BUSY',
+    current_workload: 3,
+    equipment: '18m Hydraulic Insulated Boom Lift',
+    contact_phone: '+91 471 2334005',
+    rating: 4.5,
+  },
+  {
+    team_id: 'TEAM-06',
+    name: 'Underground Civil & Manhole Rescue',
+    specialization: 'Sewer & Underground Civil',
+    latitude: 8.5020,
+    longitude: 76.9530,
+    current_area: 'Poojappura Municipal Yard',
+    availability: 'AVAILABLE',
+    current_workload: 0,
+    equipment: 'Ductile Iron Locking Covers & Shoring Kit',
+    contact_phone: '+91 471 2334006',
+    rating: 4.9,
+  },
+];
+
+export const incidents = [];
+
+/**
+ * Initializes realistic municipal infrastructure dataset
+ */
+export function initializeDatabase() {
+  if (incidents.length > 0) return;
+
+  const weather = getCurrentWeather();
+
+  const rawSeedList = [
+    {
+      incident_id: 1042,
+      infrastructure_type: 'Pothole',
+      latitude: 8.5048,
+      longitude: 76.9482,
+      address: 'MG Road, near Government General Hospital',
+      severity: 'severe',
+      est_depth_cm: 7.4,
+      detection_confidence: 0.94,
+      source: 'Onboard Vehicle Unit (Bus-042)',
+      created_at: new Date(Date.now() - 4 * 3600 * 1000).toISOString(),
+      updated_at: new Date().toISOString(),
+      status: 'acknowledged',
+      assigned_team: null,
+      sla_hours: 6,
+      repair_status: 'PENDING',
+      traffic_density: 92,
+      pedestrian_exposure: 88,
+      image_evidence: 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=600&auto=format&fit=crop&q=80',
+      frameCount: 5,
+      temporalConsistency: 0.93,
+      duplicate_sources: [
+        { vehicle_id: 'bus-042', severity: 'severe', timestamp: Date.now() / 1000 - 14400 },
+        { vehicle_id: 'bus-017', severity: 'severe', timestamp: Date.now() / 1000 - 12200 },
+        { vehicle_id: 'car-104', severity: 'moderate', timestamp: Date.now() / 1000 - 10100 },
+        { vehicle_id: 'bus-003', severity: 'severe', timestamp: Date.now() / 1000 - 8400 },
+        { vehicle_id: 'car-118', severity: 'moderate', timestamp: Date.now() / 1000 - 6200 },
+        { vehicle_id: 'bus-042', severity: 'severe', timestamp: Date.now() / 1000 - 3900 },
+        { vehicle_id: 'citizen-app', severity: 'severe', timestamp: Date.now() / 1000 - 1800 },
+      ],
+    },
+    {
+      incident_id: 1043,
+      infrastructure_type: 'Open Manhole',
+      latitude: 8.5022,
+      longitude: 76.9558,
+      address: 'Vazhuthacaud Road, near Model High School',
+      severity: 'severe',
+      est_depth_cm: 65.0,
+      detection_confidence: 0.97,
+      source: 'Municipal Drone Survey',
+      created_at: new Date(Date.now() - 2.5 * 3600 * 1000).toISOString(),
+      updated_at: new Date().toISOString(),
+      status: 'scheduled',
+      assigned_team: {
+        team_id: 'TEAM-06',
+        name: 'Underground Civil & Manhole Rescue',
+        eta: '7 min',
+        assigned_at: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+      },
+      sla_hours: 4,
+      repair_status: 'IN_PROGRESS',
+      traffic_density: 84,
+      pedestrian_exposure: 96,
+      image_evidence: 'https://images.unsplash.com/photo-1584467735871-8e85353a8413?w=600&auto=format&fit=crop&q=80',
+      frameCount: 6,
+      temporalConsistency: 0.95,
+      duplicate_sources: [
+        { vehicle_id: 'drone-01', severity: 'severe', timestamp: Date.now() / 1000 - 9000 },
+        { vehicle_id: 'citizen-911', severity: 'severe', timestamp: Date.now() / 1000 - 7200 },
+        { vehicle_id: 'police-patrol-04', severity: 'severe', timestamp: Date.now() / 1000 - 4500 },
+      ],
+    },
+    {
+      incident_id: 1044,
+      infrastructure_type: 'Waterlogging',
+      latitude: 8.4862,
+      longitude: 76.9488,
+      address: 'Kovalam Bypass Road underpass, Thiruvallam',
+      severity: 'moderate',
+      est_depth_cm: 18.0,
+      detection_confidence: 0.89,
+      source: 'CCTV Intersection Stream',
+      created_at: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
+      updated_at: new Date().toISOString(),
+      status: 'in_progress',
+      assigned_team: {
+        team_id: 'TEAM-03',
+        name: 'Stormwater & Drainage Strike Unit',
+        eta: 'On Site',
+        assigned_at: new Date(Date.now() - 50 * 60 * 1000).toISOString(),
+      },
+      sla_hours: 8,
+      repair_status: 'IN_PROGRESS',
+      traffic_density: 78,
+      pedestrian_exposure: 62,
+      image_evidence: 'https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?w=600&auto=format&fit=crop&q=80',
+      frameCount: 4,
+      temporalConsistency: 0.88,
+      duplicate_sources: [
+        { vehicle_id: 'cctv-cam-12', severity: 'moderate', timestamp: Date.now() / 1000 - 18000 },
+        { vehicle_id: 'bus-017', severity: 'moderate', timestamp: Date.now() / 1000 - 14000 },
+      ],
+    },
+    {
+      incident_id: 1045,
+      infrastructure_type: 'Road Crack',
+      latitude: 8.5460,
+      longitude: 76.9112,
+      address: 'NH 66 Corridor, Kazhakkoottam Bypass',
+      severity: 'moderate',
+      est_depth_cm: 3.8,
+      detection_confidence: 0.91,
+      source: 'Onboard Vehicle Unit (Car-104)',
+      created_at: new Date(Date.now() - 8 * 3600 * 1000).toISOString(),
+      updated_at: new Date().toISOString(),
+      status: 'reported',
+      assigned_team: null,
+      sla_hours: 24,
+      repair_status: 'PENDING',
+      traffic_density: 88,
+      pedestrian_exposure: 30,
+      image_evidence: 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=600&auto=format&fit=crop&q=80',
+      frameCount: 4,
+      temporalConsistency: 0.86,
+      duplicate_sources: [
+        { vehicle_id: 'car-104', severity: 'moderate', timestamp: Date.now() / 1000 - 28800 },
+      ],
+    },
+    {
+      incident_id: 1046,
+      infrastructure_type: 'Broken Streetlight',
+      latitude: 8.5622,
+      longitude: 76.9214,
+      address: 'Attingal Highway, near Karyavattom University Campus',
+      severity: 'minor',
+      est_depth_cm: 0,
+      detection_confidence: 0.86,
+      source: 'Night IoT Photocell Sensor',
+      created_at: new Date(Date.now() - 14 * 3600 * 1000).toISOString(),
+      updated_at: new Date().toISOString(),
+      status: 'reported',
+      assigned_team: null,
+      sla_hours: 48,
+      repair_status: 'PENDING',
+      traffic_density: 55,
+      pedestrian_exposure: 68,
+      image_evidence: 'https://images.unsplash.com/photo-1509114397022-ed747cca3f65?w=600&auto=format&fit=crop&q=80',
+      frameCount: 3,
+      temporalConsistency: 0.82,
+      duplicate_sources: [
+        { vehicle_id: 'iot-pole-491', severity: 'minor', timestamp: Date.now() / 1000 - 50400 },
+      ],
+    },
+    {
+      incident_id: 1047,
+      infrastructure_type: 'Garbage Overflow',
+      latitude: 8.4876,
+      longitude: 76.9535,
+      address: 'Chalai Bazaar West Gate, near Central Railway Station',
+      severity: 'moderate',
+      est_depth_cm: 0,
+      detection_confidence: 0.93,
+      source: 'Citizen Municipal App',
+      created_at: new Date(Date.now() - 6 * 3600 * 1000).toISOString(),
+      updated_at: new Date().toISOString(),
+      status: 'scheduled',
+      assigned_team: {
+        team_id: 'TEAM-04',
+        name: 'Solid Waste & Sanitation Response',
+        eta: '12 min',
+        assigned_at: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
+      },
+      sla_hours: 12,
+      repair_status: 'PENDING',
+      traffic_density: 82,
+      pedestrian_exposure: 92,
+      image_evidence: 'https://images.unsplash.com/photo-1530587191325-3db32d826c18?w=600&auto=format&fit=crop&q=80',
+      frameCount: 5,
+      temporalConsistency: 0.91,
+      duplicate_sources: [
+        { vehicle_id: 'citizen-app-881', severity: 'moderate', timestamp: Date.now() / 1000 - 21600 },
+        { vehicle_id: 'citizen-app-904', severity: 'moderate', timestamp: Date.now() / 1000 - 15000 },
+        { vehicle_id: 'bus-003', severity: 'moderate', timestamp: Date.now() / 1000 - 10000 },
+      ],
+    },
+    {
+      incident_id: 1048,
+      infrastructure_type: 'Pothole',
+      latitude: 8.5115,
+      longitude: 76.9630,
+      address: 'Sasthamangalam - Peroorkada Road',
+      severity: 'minor',
+      est_depth_cm: 2.1,
+      detection_confidence: 0.88,
+      source: 'Onboard Vehicle Unit (Bus-042)',
+      created_at: new Date(Date.now() - 20 * 3600 * 1000).toISOString(),
+      updated_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+      status: 'repaired',
+      assigned_team: {
+        team_id: 'TEAM-01',
+        name: 'Road Rapid Patch Alpha',
+        eta: 'Completed',
+        assigned_at: new Date(Date.now() - 16 * 3600 * 1000).toISOString(),
+      },
+      sla_hours: 24,
+      repair_status: 'REPAIR_VERIFIED',
+      repair_verification: {
+        verified: true,
+        score: 96,
+        reason: 'AI Surface Inspection confirmed complete compaction and sealed perimeter.',
+        verified_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+      },
+      after_image_evidence: 'https://images.unsplash.com/photo-1541888946425-d0fbb186c5f9?w=600&auto=format&fit=crop&q=80',
+      traffic_density: 64,
+      pedestrian_exposure: 50,
+      image_evidence: 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=600&auto=format&fit=crop&q=80',
+      frameCount: 4,
+      temporalConsistency: 0.90,
+      duplicate_sources: [
+        { vehicle_id: 'bus-042', severity: 'minor', timestamp: Date.now() / 1000 - 72000 },
+      ],
+    },
+  ];
+
+  for (const raw of rawSeedList) {
+    const reportCount = raw.duplicate_sources.length;
+
+    // Run dynamic risk engine
+    const riskAnalysis = calculateRiskScore({
+      severity: raw.severity,
+      infrastructure_type: raw.infrastructure_type,
+      est_depth_cm: raw.est_depth_cm,
+      traffic_density: raw.traffic_density,
+      pedestrian_exposure: raw.pedestrian_exposure,
+      report_count: reportCount,
+      lat: raw.latitude,
+      lon: raw.longitude,
+      weather,
+    });
+
+    // Run AI verification
+    const verification = verifyDetection({
+      confidence: raw.detection_confidence,
+      frameCount: raw.frameCount,
+      temporalConsistency: raw.temporalConsistency,
+      source: raw.source,
+      est_depth_cm: raw.est_depth_cm,
+    });
+
+    // SLA calculation
+    const createdAtMs = new Date(raw.created_at).getTime();
+    const slaDeadline = new Date(createdAtMs + raw.sla_hours * 3600 * 1000).toISOString();
+
+    const incident = {
+      id: String(raw.incident_id),
+      incident_id: raw.incident_id,
+      infrastructure_type: raw.infrastructure_type,
+      latitude: raw.latitude,
+      longitude: raw.longitude,
+      address: raw.address,
+      detection_confidence: raw.detection_confidence,
+      severity: raw.severity,
+      est_depth_cm: raw.est_depth_cm,
+      risk_score: riskAnalysis.risk_score,
+      priority: riskAnalysis.priority,
+      risk_factors: riskAnalysis.factors,
+      location_context: riskAnalysis.location_context,
+      source: raw.source,
+      image_evidence: raw.image_evidence,
+      after_image_evidence: raw.after_image_evidence || null,
+      created_at: raw.created_at,
+      updated_at: raw.updated_at,
+      status: raw.status,
+      assigned_team: raw.assigned_team,
+      estimated_response_time: raw.assigned_team?.eta || 'Pending Dispatch',
+      sla_hours: raw.sla_hours,
+      sla_deadline: slaDeadline,
+      verification_status: verification.verification_status,
+      verification_score: verification.verification_score,
+      verification_reason: verification.verification_reason,
+      repair_status: raw.repair_status,
+      repair_verification: raw.repair_verification || null,
+      report_count: reportCount,
+      linked_reports: raw.duplicate_sources.map((s, idx) => ({
+        report_id: `rep-${raw.incident_id}-${idx + 1}`,
+        vehicle_id: s.vehicle_id,
+        source: raw.source,
+        latitude: raw.latitude,
+        longitude: raw.longitude,
+        severity: s.severity,
+        est_depth_cm: raw.est_depth_cm,
+        confidence: raw.detection_confidence,
+        timestamp: s.timestamp,
+      })),
+      timestamp: createdAtMs / 1000, // Legacy compatibility
+    };
+
+    incident.deterioration_projection = calculateDeteriorationProjection(incident, weather);
+
+    incidents.push(incident);
+  }
+}
+
+initializeDatabase();

@@ -1,0 +1,8 @@
+{
+  "name": "Roadstate — Live AI Pothole Detection & Reporting",
+  "description": "Real-time pothole detection and reporting system with stereo vision depth estimation, GPS deduplication, and a live municipal dashboard.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

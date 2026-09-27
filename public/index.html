@@ -1,0 +1,2926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartCity AI — Municipal Infrastructure Detection &amp; Priority Dispatch</title>
+<meta name="description" content="Municipal infrastructure defect detection, multi-frame AI verification, smart deduplication, dynamic risk engine, and closed-loop dispatch command center.">
+<meta property="og:title" content="SmartCity AI — Infrastructure Detection &amp; Dispatch">
+<meta property="og:description" content="AI-Powered Municipal Infrastructure Monitoring, Risk Scoring, and Smart Work Crew Dispatch">
+
+<!-- Leaflet CSS & MarkerCluster & Heatmap plugins -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg-base: #0b0d11;
+    --bg-surface: #12151b;
+    --bg-surface-raised: #181d25;
+    --bg-surface-active: #222834;
+    --border-subtle: #1e2430;
+    --border-muted: #2d3546;
+    --text-primary: #f3f4f6;
+    --text-secondary: #9ca3af;
+    --text-muted: #6b7280;
+    --accent-gold: #f59e0b;
+    --crit: #ef4444;
+    --crit-dim: rgba(239, 68, 68, 0.15);
+    --high: #f97316;
+    --high-dim: rgba(249, 115, 22, 0.15);
+    --med: #eab308;
+    --med-dim: rgba(234, 179, 8, 0.15);
+    --low: #10b981;
+    --low-dim: rgba(16, 185, 129, 0.15);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    overflow: hidden;
+  }
+
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+  .heading { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.04em; }
+
+  /* App Layout */
+  #app-root {
+    display: grid;
+    grid-template-columns: 210px 1fr;
+    grid-template-rows: 52px 1fr;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* Top Bar */
+  header {
+    grid-column: 1 / -1;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 100;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .logo-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    background: #0b0d11;
+    border: 1px solid var(--border-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-gold);
+    font-weight: 700;
+    font-size: 13px;
+  }
+
+  .logo-text h1 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.1;
+    letter-spacing: 0.02em;
+  }
+
+  .header-center {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .weather-pill {
+    background: var(--bg-surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    padding: 5px 12px;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .weather-pill:hover {
+    border-color: var(--border-muted);
+    background: var(--bg-surface-active);
+  }
+  .weather-pill.raining {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.15);
+    color: #93c5fd;
+  }
+
+  .sys-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    padding: 5px 12px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--low);
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.7);
+  }
+  .live-dot.active {
+    animation: live-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes live-pulse {
+    0% { transform: scale(0.9); opacity: 0.8; }
+    50% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 10px rgba(16, 185, 129, 0.9); }
+    100% { transform: scale(0.9); opacity: 0.8; }
+  }
+  .live-dot.crit {
+    background: var(--crit);
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
+    animation: crit-pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes crit-pulse {
+    0% { transform: scale(0.9); opacity: 0.8; }
+    50% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 12px rgba(239, 68, 68, 1); }
+    100% { transform: scale(0.9); opacity: 0.8; }
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface-raised);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn:hover {
+    background: var(--bg-surface-active);
+    border-color: var(--border-muted);
+  }
+  .btn-primary {
+    background: var(--accent-gold);
+    color: #0b0d11;
+    border-color: var(--accent-gold);
+    font-weight: 600;
+  }
+  .btn-primary:hover {
+    background: #e08e07;
+  }
+  .btn-crit {
+    background: var(--crit);
+    color: #fff;
+    border-color: var(--crit);
+  }
+  .btn-sm {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  /* Sidebar */
+  aside {
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 12px 8px;
+    overflow-y: auto;
+  }
+
+  .nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .nav-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    padding: 8px 10px 4px;
+    font-weight: 600;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+  }
+  .nav-item:hover {
+    background: var(--bg-surface-raised);
+    color: var(--text-primary);
+  }
+  .nav-item.active {
+    background: var(--bg-surface-active);
+    color: var(--text-primary);
+    font-weight: 600;
+    border-left: 2px solid var(--accent-gold);
+  }
+
+  .nav-item-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nav-count {
+    font-size: 10px;
+    background: var(--bg-surface-raised);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--text-muted);
+  }
+  .nav-count.alert {
+    background: var(--crit-dim);
+    color: var(--crit);
+    font-weight: 600;
+  }
+
+  /* Main Workspace */
+  main {
+    background: var(--bg-base);
+    overflow-y: auto;
+    position: relative;
+  }
+
+  .view-pane {
+    display: none;
+    padding: 16px 20px;
+    min-height: 100%;
+  }
+  .view-pane.active {
+    display: block;
+  }
+
+  /* KPI Grid */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .kpi-card {
+    background: var(--bg-surface);
+    border-radius: 6px;
+    padding: 12px 14px;
+    position: relative;
+    border: 1px solid var(--border-subtle);
+  }
+  .kpi-card.crit { border-top: 2px solid var(--crit); }
+  .kpi-card.high { border-top: 2px solid var(--high); }
+  .kpi-card.med { border-top: 2px solid var(--med); }
+  .kpi-card.low { border-top: 2px solid var(--low); }
+
+  .kpi-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  .kpi-value {
+    font-family: 'Oswald', sans-serif;
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--text-primary);
+  }
+  .kpi-sub {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Dashboard Split Sections */
+  .grid-2col {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+
+  .section-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .section-header {
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-surface-raised);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .section-header h2 {
+    font-family: 'Oswald', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+  }
+
+  .map-container {
+    height: 480px;
+    width: 100%;
+    position: relative;
+    background: #080a0e;
+  }
+
+  .map-overlay-controls {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 500;
+    display: flex;
+    gap: 4px;
+    background: rgba(18, 21, 27, 0.9);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    padding: 3px;
+  }
+
+  /* Priority Queue Clean Rows */
+  .table-container {
+    overflow-x: auto;
+    max-height: 480px;
+  }
+
+  table.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    text-align: left;
+  }
+  table.data-table th {
+    background: var(--bg-surface-raised);
+    padding: 8px 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  table.data-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+  }
+  table.data-table tr:hover td {
+    background: var(--bg-surface-raised);
+    cursor: pointer;
+  }
+
+  /* Clean Priority Queue List Items */
+  .queue-list {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    max-height: 480px;
+  }
+  .queue-item {
+    display: grid;
+    grid-template-columns: 20px 70px 1fr 60px 70px;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    cursor: pointer;
+    transition: background 0.1s ease;
+  }
+  .queue-item:hover {
+    background: var(--bg-surface-raised);
+  }
+  .queue-item .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .badge-crit { background: var(--crit-dim); color: var(--crit); }
+  .badge-high { background: var(--high-dim); color: var(--high); }
+  .badge-med { background: var(--med-dim); color: var(--med); }
+  .badge-low { background: var(--low-dim); color: var(--low); }
+
+  .status-tag {
+    font-size: 10px;
+    text-transform: uppercase;
+    padding: 2px 5px;
+    border-radius: 3px;
+    background: var(--bg-surface-raised);
+    color: var(--text-secondary);
+  }
+
+  /* Incident Detail Modal */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(2px);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-backdrop.open {
+    display: flex;
+  }
+
+  .modal-dialog {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-muted);
+    border-radius: 8px;
+    width: 860px;
+    max-width: 94vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 16px 36px rgba(0,0,0,0.8);
+    overflow: hidden;
+  }
+
+  .modal-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-surface-raised);
+  }
+  .modal-header h3 {
+    font-family: 'Oswald', sans-serif;
+    font-size: 16px;
+    letter-spacing: 0.04em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .modal-body {
+    padding: 18px 20px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  .modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-surface-raised);
+  }
+
+  .factor-bar {
+    margin-bottom: 8px;
+  }
+  .factor-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 3px;
+  }
+  .factor-track {
+    height: 5px;
+    background: var(--bg-base);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .factor-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent-gold);
+  }
+
+  .evidence-preview {
+    width: 100%;
+    height: 170px;
+    border-radius: 4px;
+    object-fit: cover;
+    background: #0b0d11;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .chat-msg {
+    padding: 10px 12px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .chat-msg.user {
+    background: var(--bg-surface-active);
+    color: var(--text-primary);
+    align-self: flex-end;
+  }
+  .chat-msg.bot {
+    background: var(--bg-surface-raised);
+    color: var(--text-secondary);
+  }
+
+  /* Filters row */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .search-input {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    padding: 6px 10px;
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 12px;
+    width: 240px;
+  }
+  .select-filter {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    padding: 6px 10px;
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 12px;
+  }
+
+  .chip-group {
+    display: flex;
+    gap: 4px;
+  }
+  .filter-chip {
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .filter-chip.active {
+    background: var(--accent-gold);
+    color: #0b0d11;
+    font-weight: 600;
+    border-color: var(--accent-gold);
+  }
+
+  /* Custom Leaflet Dark Styling & OSM Tiles */
+  .dark-osm-tile-layer {
+    filter: brightness(0.62) invert(1) contrast(2.8) hue-rotate(200deg) saturate(0.25) brightness(0.75);
+  }
+  .leaflet-container {
+    background: #0b0e14 !important;
+    font-family: 'Inter', sans-serif !important;
+  }
+  .leaflet-control-zoom a {
+    background: var(--bg-surface) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-subtle) !important;
+  }
+  .leaflet-control-zoom a:hover {
+    background: var(--bg-surface-raised) !important;
+    color: var(--accent-gold) !important;
+  }
+  .leaflet-control-attribution {
+    background: rgba(18, 21, 27, 0.8) !important;
+    color: var(--text-muted) !important;
+    font-size: 9px !important;
+  }
+  .leaflet-control-attribution a {
+    color: var(--text-secondary) !important;
+  }
+  .leaflet-popup-content-wrapper {
+    background: var(--bg-surface) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-muted) !important;
+    border-radius: 6px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7) !important;
+    padding: 0 !important;
+  }
+  .leaflet-popup-content {
+    margin: 0 !important;
+    line-height: 1.4 !important;
+  }
+  .leaflet-popup-tip {
+    background: var(--bg-surface) !important;
+    border-top: 1px solid var(--border-muted) !important;
+  }
+  .map-popup-card {
+    padding: 12px 14px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    min-width: 220px;
+  }
+  .popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .popup-id {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+  .popup-title {
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+  .popup-meta {
+    font-size: 11px;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-bottom: 10px;
+  }
+  .popup-meta b {
+    color: #e5e7eb;
+  }
+
+  /* Marker Clustering Palette */
+  .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large {
+    background-color: rgba(245, 158, 11, 0.25) !important;
+  }
+  .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
+    background-color: #12151b !important;
+    border: 2px solid var(--accent-gold) !important;
+    color: var(--accent-gold) !important;
+    font-family: 'Oswald', sans-serif !important;
+    font-weight: 700 !important;
+    font-size: 12px !important;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.4) !important;
+  }
+
+  /* Map overlay loading / error state */
+  .map-status-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(11, 13, 17, 0.85);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    font-size: 12px;
+    color: var(--text-secondary);
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<div id="app-root">
+  <!-- TOP BAR -->
+  <header>
+    <div class="header-left">
+      <div class="logo-badge">
+        <div class="logo-icon">SC</div>
+        <div class="logo-text">
+          <h1>SmartCity AI</h1>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="weather-pill" id="weather-badge" title="Click to simulate rainfall / weather changes">
+        <span id="weather-text">Scattered Clouds · Flood Risk: LOW</span>
+      </div>
+
+      <div class="sys-badge">
+        <div class="live-dot"></div>
+        <span>SYSTEM ONLINE</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <button class="btn btn-sm" id="btn-quick-ping" title="Simulates a vehicle camera or sensor reporting a defect">
+        Simulate Detection
+      </button>
+      <div class="sys-badge mono" id="clock-display">00:00:00 UTC</div>
+    </div>
+  </header>
+
+  <!-- LEFT SIDEBAR -->
+  <aside>
+    <div class="nav-group">
+      <div class="nav-label">Navigation</div>
+      <div class="nav-item active" data-view="overview">
+        <div class="nav-item-left">OVERVIEW</div>
+      </div>
+      <div class="nav-item" data-view="incidents">
+        <div class="nav-item-left">INCIDENTS</div>
+        <span class="nav-count" id="sidebar-total-count">0</span>
+      </div>
+      <div class="nav-item" data-view="live-ai">
+        <div class="nav-item-left">LIVE AI</div>
+      </div>
+      <div class="nav-item" data-view="priority-queue">
+        <div class="nav-item-left">PRIORITY</div>
+        <span class="nav-count alert" id="sidebar-crit-count">0</span>
+      </div>
+      <div class="nav-item" data-view="teams">
+        <div class="nav-item-left">DISPATCH</div>
+      </div>
+      <div class="nav-item" data-view="map-view">
+        <div class="nav-item-left">RISK MAP</div>
+      </div>
+      <div class="nav-item" data-view="analytics">
+        <div class="nav-item-left">ANALYTICS</div>
+      </div>
+      <div class="nav-item" data-view="assistant">
+        <div class="nav-item-left">AI ASSISTANT</div>
+      </div>
+    </div>
+
+    <div style="padding: 10px; background: var(--bg-surface-raised); border-radius: 4px; font-size: 11px;">
+      <div style="color: var(--text-muted); font-size: 9px; text-transform: uppercase;">MUNICIPAL DISTRICT</div>
+      <div style="font-weight: 600; color: var(--text-primary); margin-top: 2px;">Trivandrum City Command</div>
+      <div class="mono" style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">Zone 04 · Live</div>
+    </div>
+  </aside>
+
+  <!-- MAIN WORKSPACE -->
+  <main>
+    <!-- VIEW 1: OVERVIEW -->
+    <div class="view-pane active" id="pane-overview">
+      <!-- KPI Row (Exact match to concept layout: ACTIVE, CRITICAL, DISPATCH, RESOLVED) -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">ACTIVE</div>
+          <div class="kpi-value" id="kpi-active">—</div>
+          <div class="kpi-sub">Open infrastructure incidents</div>
+        </div>
+        <div class="kpi-card crit">
+          <div class="kpi-label">CRITICAL</div>
+          <div class="kpi-value" id="kpi-critical" style="color: var(--crit);">—</div>
+          <div class="kpi-sub">Risk score &ge; 80 / Immediate</div>
+        </div>
+        <div class="kpi-card high">
+          <div class="kpi-label">DISPATCH</div>
+          <div class="kpi-value" id="kpi-pending" style="color: var(--high);">—</div>
+          <div class="kpi-sub">Pending work crew assignment</div>
+        </div>
+        <div class="kpi-card low">
+          <div class="kpi-label">RESOLVED</div>
+          <div class="kpi-value" id="kpi-resolved" style="color: var(--low);">—</div>
+          <div class="kpi-sub" id="kpi-res-rate">AI verified complete</div>
+        </div>
+      </div>
+
+      <!-- Split Map & Priority Queue Section -->
+      <div class="grid-2col">
+        <!-- City Risk Map Card -->
+        <div class="section-card">
+          <div class="section-header">
+            <h2>City Risk Map</h2>
+            <div style="display: flex; gap: 6px;">
+              <button class="btn btn-sm" id="btn-toggle-heatmap">Risk Density</button>
+              <button class="btn btn-sm" id="btn-reset-map-zoom">Center</button>
+            </div>
+          </div>
+          <div style="position: relative;">
+            <div class="map-container" id="overview-map"></div>
+            <div class="map-status-overlay" id="overview-map-status" style="display: none;"></div>
+            <div id="map-tile-error-banner" style="display: none; position: absolute; bottom: 8px; left: 8px; z-index: 1000; padding: 4px 8px; background: rgba(239, 68, 68, 0.9); color: white; font-size: 11px; border-radius: 4px;">Map tiles could not be loaded.</div>
+          </div>
+          <div style="padding: 8px 12px; background: var(--bg-surface-raised); border-top: 1px solid var(--border-subtle); display: flex; gap: 14px; font-size: 11px; color: var(--text-secondary); flex-wrap: wrap; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 4px;"><span style="color: var(--crit); font-size: 13px;">●</span> Critical (&ge;80)</div>
+            <div style="display: flex; align-items: center; gap: 4px;"><span style="color: var(--high); font-size: 13px;">●</span> High (65-79)</div>
+            <div style="display: flex; align-items: center; gap: 4px;"><span style="color: var(--med); font-size: 13px;">●</span> Medium (45-64)</div>
+            <div style="display: flex; align-items: center; gap: 4px;"><span style="color: var(--low); font-size: 13px;">●</span> Low / Resolved</div>
+            <div style="display: flex; align-items: center; gap: 4px;"><span style="color: #38bdf8; font-size: 13px;">🔵</span> Maintenance Crew</div>
+          </div>
+        </div>
+
+        <!-- Priority Queue Quick View -->
+        <div class="section-card">
+          <div class="section-header">
+            <h2>Priority Queue</h2>
+            <button class="btn btn-sm" onclick="switchView('priority-queue')">Full Queue</button>
+          </div>
+          <div class="queue-list" id="overview-queue-list">
+            <!-- Rendered cleanly matching concept -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Split: Trends & Active Crews -->
+      <div class="grid-2col">
+        <div class="section-card">
+          <div class="section-header">
+            <h2>Risk Trends &amp; Incident Distribution</h2>
+          </div>
+          <div style="padding: 14px;" id="type-breakdown-container">
+            <!-- Progress bars rendered dynamically -->
+          </div>
+        </div>
+
+        <div class="section-card">
+          <div class="section-header">
+            <h2>Active Crews</h2>
+            <button class="btn btn-sm" onclick="switchView('teams')">Manage</button>
+          </div>
+          <div class="table-container" style="max-height: 220px;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Team</th>
+                  <th>Specialization</th>
+                  <th>Status</th>
+                  <th>Workload</th>
+                </tr>
+              </thead>
+              <tbody id="overview-teams-tbody">
+                <!-- Rendered dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 2: ALL INCIDENTS -->
+    <div class="view-pane" id="pane-incidents">
+      <div class="filter-bar">
+        <div>
+          <h2 class="heading" style="font-size: 18px;">Incident Ledger</h2>
+          <div style="font-size: 11px; color: var(--text-muted);">Verified infrastructure reports from optical detection and civic sensors.</div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" class="search-input" id="incident-search" placeholder="Search ID, street, or type...">
+          <select class="select-filter" id="filter-type-select">
+            <option value="all">All Infrastructure Types</option>
+            <option value="Pothole">Pothole</option>
+            <option value="Road Crack">Road Crack</option>
+            <option value="Waterlogging">Waterlogging</option>
+            <option value="Garbage Overflow">Garbage Overflow</option>
+            <option value="Broken Streetlight">Broken Streetlight</option>
+            <option value="Open Manhole">Open Manhole</option>
+          </select>
+          <select class="select-filter" id="filter-status-select">
+            <option value="all">All Statuses</option>
+            <option value="reported">Reported</option>
+            <option value="acknowledged">Acknowledged</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="in_progress">In Progress</option>
+            <option value="repaired">Repaired</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <div class="table-container" style="max-height: calc(100vh - 170px);">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Type</th>
+                <th>Location</th>
+                <th>Risk Score</th>
+                <th>Priority</th>
+                <th>Source</th>
+                <th>Verification</th>
+                <th>Assigned Crew</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="all-incidents-tbody">
+              <!-- Rendered dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 3: LIVE AI DETECTION (Real Camera & Computer Vision) -->
+    <div class="view-pane" id="pane-live-ai">
+      <div class="filter-bar">
+        <div>
+          <h2 class="heading" style="font-size: 18px; display: flex; align-items: center; gap: 8px;">
+            Live AI Detection
+            <span class="live-dot" id="live-ai-header-dot" style="display: inline-block;"></span>
+          </h2>
+          <div style="font-size: 11px; color: var(--text-muted);">Real-time camera ingestion and YOLO optical defect inference directly wired to Priority Dispatch.</div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <span class="status-tag" id="live-model-badge">Model: YOLOv8-Stereo-Pothole-v1.4</span>
+          <span class="status-tag" id="live-source-badge">Source: Offline</span>
+        </div>
+      </div>
+
+      <!-- Camera Permission Warning Banner -->
+      <div id="camera-perm-alert" style="display: none; padding: 10px 14px; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--crit); border-radius: 4px; margin-bottom: 12px; font-size: 12px; color: #fca5a5;">
+        <strong>Camera permission is required for live detection.</strong> Please enable camera access in your browser permissions, or select <strong>Use uploaded video</strong> / <strong>Sample Video</strong> as a fallback.
+      </div>
+
+      <!-- 2-Column Responsive Workspace -->
+      <div style="display: grid; grid-template-columns: 1fr 370px; gap: 14px; height: calc(100vh - 130px);">
+        
+        <!-- LEFT: Large Live Camera/Video Area -->
+        <div class="section-card" style="display: flex; flex-direction: column; overflow: hidden; height: 100%;">
+          
+          <!-- Live Viewport Container -->
+          <div id="video-viewport" style="position: relative; flex: 1; background: #000; min-height: 380px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+            <!-- Real HTML5 Video Element -->
+            <video id="live-video" playsinline muted autoplay loop style="width: 100%; height: 100%; object-fit: contain; background: #000; display: block;"></video>
+            
+            <!-- Real-time Bounding Box Overlay Canvas -->
+            <canvas id="live-overlay-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2;"></canvas>
+
+            <!-- Standby / Offline Screen Overlay -->
+            <div id="camera-standby-screen" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(11, 13, 17, 0.95); text-align: center; padding: 24px; z-index: 4;">
+              <div style="width: 52px; height: 52px; border-radius: 8px; border: 1px dashed var(--border-muted); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; color: var(--accent-gold); font-size: 22px;">
+                👁️
+              </div>
+              <div style="font-weight: 600; font-size: 15px; color: var(--text-primary); margin-bottom: 6px;">Computer Vision Pipeline Standby</div>
+              <div style="font-size: 12px; color: var(--text-secondary); max-width: 440px; line-height: 1.5; margin-bottom: 16px;">
+                Connect device webcam, upload an MP4/WebM road survey video, or load the pre-recorded municipal test feed to start live pothole detection and risk scoring.
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+                <button class="btn btn-primary" onclick="startWebcam()">Start Camera</button>
+                <button class="btn" onclick="startSampleVideo()">Play Sample Video</button>
+                <button class="btn" onclick="document.getElementById('video-file-input').click()">Upload Video</button>
+              </div>
+            </div>
+
+            <!-- Top HUD Badges -->
+            <div style="position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; align-items: center; pointer-events: none; z-index: 5;">
+              <div class="sys-badge mono" id="hud-camera-status" style="background: rgba(18, 21, 27, 0.88); backdrop-filter: blur(4px);">
+                <div class="live-dot" id="hud-live-dot" style="background: var(--text-muted); box-shadow: none;"></div>
+                <span id="hud-status-text">OFFLINE</span>
+              </div>
+              <div class="sys-badge mono" id="hud-stream-type" style="background: rgba(18, 21, 27, 0.88); backdrop-filter: blur(4px); font-size: 10px;">
+                NO FEED
+              </div>
+            </div>
+
+            <!-- Bottom HUD Stats -->
+            <div style="position: absolute; bottom: 12px; right: 12px; display: flex; gap: 6px; pointer-events: none; z-index: 5;">
+              <div class="sys-badge mono" id="hud-latency" style="background: rgba(18, 21, 27, 0.88); backdrop-filter: blur(4px); font-size: 10px;">
+                Latency: — ms
+              </div>
+              <div class="sys-badge mono" id="hud-fps" style="background: rgba(18, 21, 27, 0.88); backdrop-filter: blur(4px); font-size: 10px;">
+                0 FPS
+              </div>
+            </div>
+          </div>
+
+          <!-- Video Controls Toolbar -->
+          <div style="padding: 10px 14px; background: var(--bg-surface-raised); border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+              <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                <button class="btn btn-primary btn-sm" id="btn-start-camera" onclick="startWebcam()">
+                  Start Camera
+                </button>
+                <button class="btn btn-sm" id="btn-stop-camera" onclick="stopCurrentStream()" style="display: none;">
+                  Stop Camera
+                </button>
+
+                <input type="file" id="video-file-input" accept="video/*,image/*" style="display: none;" onchange="handleFileSelect(event)">
+                <button class="btn btn-sm" onclick="document.getElementById('video-file-input').click()">
+                  Use Uploaded Video
+                </button>
+
+                <button class="btn btn-sm" id="btn-sample-video" onclick="startSampleVideo()">
+                  Sample Video
+                </button>
+
+                <button class="btn btn-sm" id="btn-sample-still" onclick="startSampleImage()">
+                  Sample Still Frame
+                </button>
+              </div>
+
+              <div>
+                <button class="btn btn-crit btn-sm" id="btn-capture-incident" onclick="captureCurrentIncident()">
+                  Capture Incident
+                </button>
+              </div>
+            </div>
+
+            <!-- IP Camera / Stream Input Row -->
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <span style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">IP / Stream URL:</span>
+              <input type="text" id="ip-camera-url" class="search-input" style="flex: 1; padding: 3px 8px; font-size: 11px;" placeholder="Enter stream URL or video link (MP4 / HLS / WebM)">
+              <button class="btn btn-sm" onclick="connectIpCamera()">Connect</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Live Detection Information Panel -->
+        <div style="display: flex; flex-direction: column; gap: 10px; overflow-y: auto;">
+          
+          <!-- Telemetry & Status Card -->
+          <div class="section-card" style="padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <span class="nav-label" style="padding: 0;">Camera Status</span>
+              <div style="display: flex; align-items: center; gap: 6px;" class="mono" id="panel-camera-status">
+                <span class="live-dot" id="panel-status-dot" style="background: var(--text-muted); box-shadow: none;"></span>
+                <span id="panel-status-text" style="font-size: 11px; font-weight: 600;">OFFLINE</span>
+              </div>
+            </div>
+
+            <!-- 4 Metrics Grid -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div style="background: var(--bg-surface-raised); padding: 8px 10px; border-radius: 4px;">
+                <div style="font-size: 9px; color: var(--text-muted); text-transform: uppercase;">FPS (Inference)</div>
+                <div class="mono" style="font-size: 16px; font-weight: 700; color: var(--text-primary); margin-top: 2px;" id="panel-fps">0 FPS</div>
+              </div>
+              <div style="background: var(--bg-surface-raised); padding: 8px 10px; border-radius: 4px;">
+                <div style="font-size: 9px; color: var(--text-muted); text-transform: uppercase;">Inference Latency</div>
+                <div class="mono" style="font-size: 16px; font-weight: 700; color: var(--accent-gold); margin-top: 2px;" id="panel-latency">— ms</div>
+              </div>
+              <div style="background: var(--bg-surface-raised); padding: 8px 10px; border-radius: 4px;">
+                <div style="font-size: 9px; color: var(--text-muted); text-transform: uppercase;">Frames Processed</div>
+                <div class="mono" style="font-size: 16px; font-weight: 700; color: var(--text-primary); margin-top: 2px;" id="panel-frames">0</div>
+              </div>
+              <div style="background: var(--bg-surface-raised); padding: 8px 10px; border-radius: 4px;">
+                <div style="font-size: 9px; color: var(--text-muted); text-transform: uppercase;">Objects Detected</div>
+                <div class="mono" style="font-size: 16px; font-weight: 700; color: var(--crit); margin-top: 2px;" id="panel-objects">0</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Detected Objects Container -->
+          <div class="section-card" style="padding: 12px; flex: 1; display: flex; flex-direction: column;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span class="nav-label" style="padding: 0;">Live Detected Objects</span>
+              <span class="badge badge-crit" id="detection-count-badge" style="display: none;">0 DETECTED</span>
+            </div>
+
+            <!-- List of real detections -->
+            <div id="live-detections-list" style="display: flex; flex-direction: column; gap: 8px; flex: 1; overflow-y: auto;">
+              <div id="no-detections-msg" style="text-align: center; padding: 24px 12px; color: var(--text-muted); font-size: 11px;">
+                No defects detected in current video frame.
+              </div>
+            </div>
+
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-subtle); font-size: 11px;">
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-secondary);">
+                <input type="checkbox" id="auto-create-incidents-chk" checked>
+                Auto-create verified incident (3 frames)
+              </label>
+            </div>
+          </div>
+
+          <!-- Linked Incident Banner (when verified or captured) -->
+          <div id="linked-incident-banner" class="section-card" style="display: none; padding: 10px 12px; background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.35);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <span style="font-size: 10px; text-transform: uppercase; font-weight: 700; color: var(--accent-gold);">Incident Registered</span>
+              <span class="mono" id="linked-incident-id" style="font-size: 12px; font-weight: 700;">#1044</span>
+            </div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;" id="linked-incident-desc">
+              Pothole verified via multi-frame computer vision tracking.
+            </div>
+            <div style="display: flex; gap: 6px;">
+              <button class="btn btn-sm btn-primary" id="btn-view-linked-incident" onclick="openLinkedIncident()">Inspect Incident</button>
+              <button class="btn btn-sm" onclick="switchView('priority-queue')">Priority Queue</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 4: PRIORITY QUEUE -->
+    <div class="view-pane" id="pane-priority-queue">
+      <div class="filter-bar">
+        <div>
+          <h2 class="heading" style="font-size: 18px;">Priority Dispatch Queue</h2>
+          <div style="font-size: 11px; color: var(--text-muted);">Dynamic sorting based on composite risk score (0-100) and SLA urgency.</div>
+        </div>
+        <div class="chip-group" id="queue-priority-chips">
+          <div class="filter-chip active" data-pri="all">All Priorities</div>
+          <div class="filter-chip" data-pri="CRITICAL">Critical</div>
+          <div class="filter-chip" data-pri="HIGH">High</div>
+          <div class="filter-chip" data-pri="MEDIUM">Medium</div>
+          <div class="filter-chip" data-pri="LOW">Low</div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <div class="table-container" style="max-height: calc(100vh - 170px);">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Type</th>
+                <th>Location / Address</th>
+                <th>Risk Score</th>
+                <th>Priority</th>
+                <th>Confidence</th>
+                <th>Merged Reports</th>
+                <th>SLA</th>
+                <th>Assigned Crew</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="queue-full-tbody">
+              <!-- Rendered dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 5: MAP & HEATMAP (Full City Risk Map) -->
+    <div class="view-pane" id="pane-map-view" style="padding: 8px;">
+      <div class="section-card" style="height: calc(100vh - 72px); display: flex; flex-direction: column;">
+        <div class="section-header">
+          <h2>District Risk Topology &amp; Crews</h2>
+          <div style="display: flex; gap: 8px; font-size: 11px; align-items: center; flex-wrap: wrap;">
+            <button class="btn btn-sm" id="btn-full-heatmap">Risk Density</button>
+            <button class="btn btn-sm" id="btn-full-center">Center</button>
+            <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; color: var(--text-secondary);">
+              <input type="checkbox" id="chk-show-crews" checked> Maintenance Crews
+            </label>
+            <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; color: var(--text-secondary);">
+              <input type="checkbox" id="chk-show-clusters" checked> Cluster Incidents
+            </label>
+          </div>
+        </div>
+        <div style="position: relative; flex: 1; min-height: 0;">
+          <div class="map-container" id="full-screen-map" style="height: 100%;"></div>
+          <div class="map-status-overlay" id="full-map-status" style="display: none;"></div>
+        </div>
+        <div style="padding: 8px 12px; background: var(--bg-surface-raised); border-top: 1px solid var(--border-subtle); display: flex; gap: 14px; font-size: 11px; color: var(--text-secondary); flex-wrap: wrap; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 4px;"><span style="color: var(--crit); font-size: 13px;">●</span> Critical (&ge;80)</div>
+          <div style="display: flex; align-items: center; gap: 4px;"><span style="color: var(--high); font-size: 13px;">●</span> High (65-79)</div>
+          <div style="display: flex; align-items: center; gap: 4px;"><span style="color: var(--med); font-size: 13px;">●</span> Medium (45-64)</div>
+          <div style="display: flex; align-items: center; gap: 4px;"><span style="color: var(--low); font-size: 13px;">●</span> Low / Resolved</div>
+          <div style="display: flex; align-items: center; gap: 4px;"><span style="color: #38bdf8; font-size: 13px;">🔵</span> Maintenance Crew</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 6: TEAMS & DISPATCH -->
+    <div class="view-pane" id="pane-teams">
+      <div class="filter-bar">
+        <div>
+          <h2 class="heading" style="font-size: 18px;">Municipal Dispatch &amp; Work Crews</h2>
+          <div style="font-size: 11px; color: var(--text-muted);">Specialized municipal maintenance units equipped for rapid surface, drainage, and civil repair.</div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;" id="teams-cards-grid">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+
+    <!-- VIEW 7: ANALYTICS -->
+    <div class="view-pane" id="pane-analytics">
+      <div class="filter-bar">
+        <div>
+          <h2 class="heading" style="font-size: 18px;">Infrastructure Risk &amp; Resolution Analytics</h2>
+          <div style="font-size: 11px; color: var(--text-muted);">Operational performance metrics and recurring defect density.</div>
+        </div>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">AVG RESPONSE TIME</div>
+          <div class="kpi-value" id="ana-avg-response">18 min</div>
+          <div class="kpi-sub">Alert to on-site arrival</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">RESOLUTION RATE</div>
+          <div class="kpi-value" id="ana-res-rate">88%</div>
+          <div class="kpi-sub">Within SLA target windows</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">ACTIVE CREWS</div>
+          <div class="kpi-value" id="ana-crews">6 Teams</div>
+          <div class="kpi-sub">Equipment readiness: 100%</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">DEDUPLICATION ABSORPTION</div>
+          <div class="kpi-value" id="ana-dedup-ratio">3.4×</div>
+          <div class="kpi-sub">Reports consolidated per incident</div>
+        </div>
+      </div>
+
+      <div class="grid-2col" style="margin-top: 14px;">
+        <div class="section-card">
+          <div class="section-header">
+            <h2>Priority Breakdown</h2>
+          </div>
+          <div style="padding: 16px;" id="analytics-priority-chart">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <div class="section-card">
+          <div class="section-header">
+            <h2>Recurring Problem Corridors</h2>
+          </div>
+          <div style="padding: 14px;" id="analytics-hotspots-container">
+            <!-- Hotspots dynamically populated -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 8: AI ASSISTANT -->
+    <div class="view-pane" id="pane-assistant">
+      <div style="max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; height: calc(100vh - 90px);">
+        <div style="margin-bottom: 12px;">
+          <h2 class="heading" style="font-size: 18px;">AI Municipal Assistant</h2>
+          <div style="font-size: 11px; color: var(--text-muted);">Strictly grounded in current municipal database. Queries live incidents, team rosters, and risk factors.</div>
+        </div>
+
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
+          <button class="btn btn-sm" onclick="askAssistant('Which incidents require immediate attention?')">Immediate attention incidents</button>
+          <button class="btn btn-sm" onclick="askAssistant('Why is Incident #1042 critical?')">Why is #1042 critical?</button>
+          <button class="btn btn-sm" onclick="askAssistant('Which team is currently overloaded?')">Overloaded teams</button>
+          <button class="btn btn-sm" onclick="askAssistant('How many potholes were resolved today?')">Resolved today</button>
+          <button class="btn btn-sm" onclick="askAssistant('Show recurring problem areas.')">Recurring problem areas</button>
+        </div>
+
+        <div class="section-card" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+          <div id="chat-messages" style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column;">
+            <div class="chat-msg bot">
+              Hello! I am your <b>SmartCity AI Operations Assistant</b>. I have direct access to the municipal incident database, crew dispatch status, and road risk engine. What would you like to query?
+            </div>
+          </div>
+
+          <div style="padding: 10px; border-top: 1px solid var(--border-subtle); display: flex; gap: 8px; background: var(--bg-surface-raised);">
+            <input type="text" id="assistant-input" class="search-input" style="flex: 1;" placeholder="Ask about incidents, team workloads, or specific problem locations...">
+            <button class="btn btn-primary" id="assistant-send-btn">Submit</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- INCIDENT DETAIL & DISPATCH MODAL (Matches concept layout) -->
+<div class="modal-backdrop" id="incident-modal">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 id="modal-title">INCIDENT #1042</h3>
+      <button class="btn btn-sm" onclick="closeModal()">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <!-- Left Column: Details & Evidence -->
+      <div>
+        <div style="margin-bottom: 14px;">
+          <div class="heading" style="font-size: 20px; color: var(--text-primary);" id="modal-type-tag">Pothole</div>
+          <div style="font-size: 13px; color: var(--text-secondary); margin-top: 2px;" id="modal-address">MG Road Junction</div>
+          <div class="mono" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;" id="modal-coords">8.5048, 76.9482</div>
+        </div>
+
+        <!-- Evidence photo -->
+        <div style="margin-bottom: 14px;">
+          <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 4px; display: flex; justify-content: space-between;">
+            <span>EVIDENCE</span>
+            <span id="modal-confidence-label" class="mono">Confidence 94%</span>
+          </div>
+          <img src="" id="modal-evidence-img" class="evidence-preview" alt="Evidence">
+        </div>
+
+        <!-- Multi-frame Verification Banner -->
+        <div style="background: var(--bg-surface-raised); border-radius: 4px; padding: 10px; margin-bottom: 12px; border: 1px solid var(--border-subtle);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <span style="font-size: 10px; text-transform: uppercase; font-weight: 600; color: var(--text-muted);">AI OPTICAL VERIFICATION</span>
+            <span class="badge badge-low" id="modal-verification-status">VERIFIED</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-secondary);" id="modal-verification-reason">Confirmed across 5 video frames.</div>
+        </div>
+
+        <!-- Smart Deduplication / Linked Reports -->
+        <div style="background: var(--bg-surface-raised); border-radius: 4px; padding: 10px; border: 1px solid var(--border-subtle);">
+          <div style="font-size: 11px; font-weight: 600; color: var(--accent-gold); margin-bottom: 6px;" id="modal-dedup-summary">
+            7 reports merged into Incident #1042
+          </div>
+          <div id="modal-linked-reports" style="max-height: 80px; overflow-y: auto; font-size: 11px; color: var(--text-muted);" class="mono">
+            <!-- Linked reports list -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Risk Factors, Predictive Deterioration, Dispatch Recommendation -->
+      <div>
+        <!-- Risk Breakdown (Dominant visual importance as requested) -->
+        <div style="background: var(--bg-surface-raised); border-radius: 4px; padding: 14px; margin-bottom: 14px; border: 1px solid var(--border-subtle);">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px;">
+            <div>
+              <div style="font-size: 10px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em; color: var(--text-muted);">RISK SCORE</div>
+              <div class="heading" style="font-size: 26px; line-height: 1; color: var(--crit); margin-top: 4px;" id="modal-risk-score">93 / 100</div>
+            </div>
+            <div>
+              <div style="font-size: 10px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em; color: var(--text-muted); text-align: right;">PRIORITY</div>
+              <span class="badge badge-crit" style="font-size: 12px; margin-top: 4px;" id="modal-priority-badge">CRITICAL</span>
+            </div>
+          </div>
+
+          <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 8px; font-weight: 600;">WHY IS THIS PRIORITY?</div>
+
+          <div class="factor-bar">
+            <div class="factor-info"><span>Severity (30%)</span><span id="fact-sev" class="mono">88</span></div>
+            <div class="factor-track"><div class="factor-fill" id="bar-sev" style="width: 88%;"></div></div>
+          </div>
+          <div class="factor-bar">
+            <div class="factor-info"><span>Traffic (25%)</span><span id="fact-traf" class="mono">94</span></div>
+            <div class="factor-track"><div class="factor-fill" id="bar-traf" style="width: 94%;"></div></div>
+          </div>
+          <div class="factor-bar">
+            <div class="factor-info"><span>Pedestrian (15%)</span><span id="fact-ped" class="mono">81</span></div>
+            <div class="factor-track"><div class="factor-fill" id="bar-ped" style="width: 81%;"></div></div>
+          </div>
+          <div class="factor-bar">
+            <div class="factor-info"><span>Location (15%)</span><span id="fact-loc" class="mono">92</span></div>
+            <div class="factor-track"><div class="factor-fill" id="bar-loc" style="width: 92%;"></div></div>
+          </div>
+          <div class="factor-bar">
+            <div class="factor-info"><span>Reports (10%)</span><span id="fact-comp" class="mono">76</span></div>
+            <div class="factor-track"><div class="factor-fill" id="bar-comp" style="width: 76%;"></div></div>
+          </div>
+
+          <div style="font-size: 10px; color: var(--text-muted); margin-top: 8px; border-top: 1px solid var(--border-subtle); padding-top: 6px;" id="modal-location-reason">
+            High priority partly because incident is within 140m of Government General Hospital.
+          </div>
+        </div>
+
+        <!-- Predictive Deterioration Forecast -->
+        <div style="background: var(--bg-surface-raised); border-radius: 4px; padding: 10px; margin-bottom: 12px; border: 1px solid var(--border-subtle);">
+          <div style="font-size: 10px; text-transform: uppercase; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; display: flex; justify-content: space-between;">
+            <span>DETERIORATION PROJECTION</span>
+            <span class="mono" style="font-size: 9px; color: var(--text-muted);">Calibrated Asphalt Fatigue</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; text-align: center;">
+            <div style="background: var(--bg-base); padding: 5px; border-radius: 3px;">
+              <div style="font-size: 9px; color: var(--text-muted);">CURRENT</div>
+              <div class="heading" style="font-size: 15px;" id="pred-current">93</div>
+            </div>
+            <div style="background: var(--bg-base); padding: 5px; border-radius: 3px;">
+              <div style="font-size: 9px; color: var(--text-muted);">7-DAY PROJ</div>
+              <div class="heading" style="font-size: 15px; color: var(--high);" id="pred-7day">97</div>
+            </div>
+            <div style="background: var(--bg-base); padding: 5px; border-radius: 3px;">
+              <div style="font-size: 9px; color: var(--text-muted);">30-DAY PROJ</div>
+              <div class="heading" style="font-size: 15px; color: var(--crit);" id="pred-30day">100</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dispatch Recommendation Widget -->
+        <div style="background: var(--bg-surface-raised); border-radius: 4px; padding: 12px; border: 1px solid var(--border-subtle);">
+          <div style="font-size: 10px; text-transform: uppercase; font-weight: 600; color: var(--text-muted); margin-bottom: 8px;">ASSIGNED TEAM &amp; DISPATCH</div>
+          <div id="modal-recommended-team-box">
+            <!-- Injected dynamically -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stepper & Actions Footer -->
+    <div class="modal-footer">
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button class="btn btn-sm" id="btn-modal-progress">Mark In Progress</button>
+        <button class="btn btn-sm btn-primary" id="btn-modal-verify-repair">Verify Repair</button>
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-sm" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- WEATHER MODAL -->
+<div class="modal-backdrop" id="weather-modal">
+  <div class="modal-dialog" style="width: 440px;">
+    <div class="modal-header">
+      <h3>Weather &amp; Flood Risk Simulation</h3>
+      <button class="btn btn-sm" onclick="closeWeatherModal()">✕</button>
+    </div>
+    <div style="padding: 16px;">
+      <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
+        Simulate real-time meteorological shifts. Heavy rainfall automatically elevates flood risk factors and compounds road defect urgency.
+      </p>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <button class="btn" style="text-align: left; justify-content: flex-start; padding: 10px;" onclick="applyWeather('clear')">
+          Clear / Part Sunny — Standard flood baseline (Flood Risk: LOW)
+        </button>
+        <button class="btn" style="text-align: left; justify-content: flex-start; padding: 10px;" onclick="applyWeather('light_rain')">
+          Passing Showers — Light rain, road saturation begins (Flood Risk: MODERATE)
+        </button>
+        <button class="btn btn-crit" style="text-align: left; justify-content: flex-start; padding: 10px;" onclick="applyWeather('heavy_rain')">
+          Monsoon Heavy Downpour — Waterlogging &amp; pothole risk multiplier active (Flood Risk: HIGH)
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Leaflet & MarkerCluster & Heatmap Scripts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+
+<script>
+/* ============================================================
+   GLOBAL APPLICATION STATE
+   ============================================================ */
+let incidents = [];
+let teams = [];
+let weather = {};
+let activeIncident = null;
+let overviewMap, fullMap;
+let overviewClusterGroup = null;
+let fullClusterGroup = null;
+let overviewCrewLayer = null;
+let fullCrewLayer = null;
+let overviewHeatLayer = null;
+let fullHeatLayer = null;
+let isHeatmapActive = false;
+let isFirstLoad = true;
+
+const CITY_CENTER = [8.5241, 76.9366]; // Trivandrum Municipal Command Center
+
+/* ============================================================
+   INIT & DATA FETCHING
+   ============================================================ */
+async function initApp() {
+  initClock();
+  initMaps();
+  await refreshData();
+
+  // Periodic polling every 5 seconds
+  setInterval(refreshData, 5000);
+}
+
+async function refreshData() {
+  const overviewStatus = document.getElementById('overview-map-status');
+  const fullStatus = document.getElementById('full-map-status');
+
+  if (isFirstLoad) {
+    if (overviewStatus) {
+      overviewStatus.textContent = 'Loading infrastructure data...';
+      overviewStatus.style.display = 'flex';
+    }
+    if (fullStatus) {
+      fullStatus.textContent = 'Loading infrastructure data...';
+      fullStatus.style.display = 'flex';
+    }
+  }
+
+  try {
+    const [incRes, teamsRes, weatherRes, statsRes] = await Promise.all([
+      fetch('/api/incidents'),
+      fetch('/api/teams'),
+      fetch('/api/weather'),
+      fetch('/api/analytics'),
+    ]);
+
+    if (!incRes.ok || !teamsRes.ok) {
+      throw new Error('API response error');
+    }
+
+    incidents = await incRes.json();
+    teams = await teamsRes.json();
+    weather = await weatherRes.json();
+    const analytics = await statsRes.json();
+
+    if (isFirstLoad) {
+      isFirstLoad = false;
+      if (overviewStatus) overviewStatus.style.display = 'none';
+      if (fullStatus) fullStatus.style.display = 'none';
+    }
+
+    // Handle empty data state
+    if (!incidents || incidents.length === 0) {
+      if (overviewStatus) {
+        overviewStatus.textContent = 'No infrastructure incidents found.';
+        overviewStatus.style.display = 'flex';
+      }
+      if (fullStatus) {
+        fullStatus.textContent = 'No infrastructure incidents found.';
+        fullStatus.style.display = 'flex';
+      }
+    } else {
+      if (overviewStatus) overviewStatus.style.display = 'none';
+      if (fullStatus) fullStatus.style.display = 'none';
+    }
+
+    updateKPIs(analytics.kpis);
+    updateWeatherPill();
+    renderOverviewMap();
+    renderFullMap();
+    renderOverviewQueue();
+    renderOverviewTeams();
+    renderTypeBreakdown();
+    renderQueueTable();
+    renderAllIncidentsTable();
+    renderTeamsView();
+    renderAnalytics(analytics);
+  } catch (err) {
+    console.error('Error fetching data:', err);
+    if (overviewStatus) {
+      overviewStatus.textContent = 'Unable to load infrastructure data.';
+      overviewStatus.style.display = 'flex';
+    }
+    if (fullStatus) {
+      fullStatus.textContent = 'Unable to load infrastructure data.';
+      fullStatus.style.display = 'flex';
+    }
+  }
+}
+
+function initClock() {
+  function update() {
+    const now = new Date();
+    document.getElementById('clock-display').textContent = now.toTimeString().split(' ')[0] + ' IST';
+  }
+  update();
+  setInterval(update, 1000);
+}
+
+function updateKPIs(kpis) {
+  if (!kpis) return;
+  document.getElementById('kpi-active').textContent = kpis.active_incidents ?? '0';
+  document.getElementById('kpi-critical').textContent = kpis.critical_issues ?? '0';
+  document.getElementById('kpi-pending').textContent = kpis.pending_dispatch ?? '0';
+  document.getElementById('kpi-resolved').textContent = kpis.resolved_today ?? '0';
+
+  document.getElementById('sidebar-crit-count').textContent = kpis.critical_issues ?? '0';
+  document.getElementById('sidebar-total-count').textContent = kpis.active_incidents ?? '0';
+}
+
+function updateWeatherPill() {
+  const pill = document.getElementById('weather-badge');
+  const txt = document.getElementById('weather-text');
+  txt.textContent = `${weather.condition} · Flood Risk: ${weather.floodRiskLevel}`;
+  pill.classList.toggle('raining', weather.isRaining);
+}
+
+document.getElementById('weather-badge').addEventListener('click', () => {
+  document.getElementById('weather-modal').classList.add('open');
+});
+
+function closeWeatherModal() {
+  document.getElementById('weather-modal').classList.remove('open');
+}
+
+async function applyWeather(preset) {
+  await fetch('/api/weather', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ preset })
+  });
+  closeWeatherModal();
+  await refreshData();
+}
+
+/* ============================================================
+   REAL OPENSTREETMAP & LEAFLET MAPS SETUP
+   ============================================================ */
+const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const OSM_ATTRIB = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors';
+
+function createOsmTileLayer() {
+  const layer = L.tileLayer(OSM_TILE_URL, {
+    attribution: OSM_ATTRIB,
+    subdomains: ['a', 'b', 'c'],
+    maxZoom: 19,
+    className: 'dark-osm-tile-layer'
+  });
+
+  layer.on('tileerror', function(error) {
+    console.warn('OpenStreetMap tile error:', error);
+    const alertEl = document.getElementById('map-tile-error-banner');
+    if (alertEl) {
+      alertEl.textContent = 'Map tiles could not be loaded.';
+      alertEl.style.display = 'block';
+    }
+  });
+
+  return layer;
+}
+
+function initMaps() {
+  // 1. Overview Map
+  overviewMap = L.map('overview-map', {
+    zoomControl: true,
+    attributionControl: true,
+    minZoom: 10,
+    maxZoom: 18,
+  }).setView(CITY_CENTER, 13);
+
+  createOsmTileLayer().addTo(overviewMap);
+
+  overviewClusterGroup = L.markerClusterGroup({
+    maxClusterRadius: 36,
+    disableClusteringAtZoom: 16,
+    showCoverageOnHover: false,
+    spiderfyOnMaxZoom: true,
+  });
+  overviewMap.addLayer(overviewClusterGroup);
+
+  overviewCrewLayer = L.layerGroup().addTo(overviewMap);
+
+  // 2. Full Screen District Map
+  fullMap = L.map('full-screen-map', {
+    zoomControl: true,
+    attributionControl: true,
+    minZoom: 10,
+    maxZoom: 18,
+  }).setView(CITY_CENTER, 13);
+
+  createOsmTileLayer().addTo(fullMap);
+
+  fullClusterGroup = L.markerClusterGroup({
+    maxClusterRadius: 40,
+    disableClusteringAtZoom: 16,
+    showCoverageOnHover: false,
+    spiderfyOnMaxZoom: true,
+  });
+  fullMap.addLayer(fullClusterGroup);
+
+  fullCrewLayer = L.layerGroup().addTo(fullMap);
+
+  // Responsive Resize Observers
+  if (window.ResizeObserver) {
+    const ovEl = document.getElementById('overview-map');
+    if (ovEl) new ResizeObserver(() => overviewMap && overviewMap.invalidateSize()).observe(ovEl);
+    const flEl = document.getElementById('full-screen-map');
+    if (flEl) new ResizeObserver(() => fullMap && fullMap.invalidateSize()).observe(flEl);
+  }
+
+  // Bind Center & Heatmap Buttons
+  document.getElementById('btn-reset-map-zoom')?.addEventListener('click', () => centerMapOnIncidents(overviewMap));
+  document.getElementById('btn-full-center')?.addEventListener('click', () => centerMapOnIncidents(fullMap));
+  document.getElementById('btn-toggle-heatmap')?.addEventListener('click', toggleRiskHeatmap);
+  document.getElementById('btn-full-heatmap')?.addEventListener('click', toggleRiskHeatmap);
+
+  document.getElementById('chk-show-crews')?.addEventListener('change', (e) => {
+    if (e.target.checked) {
+      if (!fullMap.hasLayer(fullCrewLayer)) fullMap.addLayer(fullCrewLayer);
+    } else {
+      if (fullMap.hasLayer(fullCrewLayer)) fullMap.removeLayer(fullCrewLayer);
+    }
+  });
+
+  document.getElementById('chk-show-clusters')?.addEventListener('change', (e) => {
+    renderFullMap();
+  });
+}
+
+function getPriorityColor(priority) {
+  if (priority === 'CRITICAL') return '#ef4444';
+  if (priority === 'HIGH') return '#f97316';
+  if (priority === 'MEDIUM') return '#eab308';
+  return '#10b981';
+}
+
+function createIncidentMarkerIcon(incident) {
+  const color = getPriorityColor(incident.priority);
+  const isRepaired = incident.status === 'repaired' || incident.repair_status === 'REPAIR_VERIFIED';
+  const score = incident.risk_score || '';
+
+  return L.divIcon({
+    className: 'custom-map-icon',
+    html: `
+      <div style="
+        width: 24px; height: 24px; border-radius: 50%;
+        background: ${isRepaired ? '#10b981' : color};
+        border: 2px solid #12151b;
+        box-shadow: 0 0 ${incident.priority === 'CRITICAL' ? '12px' : '5px'} ${color};
+        display: flex; align-items: center; justify-content: center;
+        font-family: 'Oswald', sans-serif; font-size: 10px; font-weight: 700; color: #fff;
+        cursor: pointer;
+      " title="Incident #${incident.incident_id || incident.id} · ${incident.infrastructure_type} (${incident.priority})">
+        ${score}
+      </div>
+    `,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+}
+
+function createCrewMarkerIcon(team) {
+  const isAvail = team.availability === 'AVAILABLE';
+  const color = isAvail ? '#38bdf8' : '#f97316';
+  return L.divIcon({
+    className: 'custom-crew-icon',
+    html: `
+      <div style="
+        width: 26px; height: 26px; border-radius: 6px;
+        background: #0f172a;
+        border: 2px solid ${color};
+        box-shadow: 0 0 8px ${color}88;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 12px; color: ${color};
+        cursor: pointer;
+      " title="Crew: ${team.name} (${team.availability})">
+        🛠️
+      </div>
+    `,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+  });
+}
+
+function createIncidentPopupContent(inc) {
+  const priColor = getPriorityColor(inc.priority);
+  const isRepaired = inc.status === 'repaired' || inc.repair_status === 'REPAIR_VERIFIED';
+  const statusDisplay = isRepaired ? 'RESOLVED' : (inc.status ? inc.status.toUpperCase() : 'REPORTED');
+  const locStr = inc.address || `${Number(inc.latitude).toFixed(4)}, ${Number(inc.longitude).toFixed(4)}`;
+
+  return `
+    <div class="map-popup-card">
+      <div class="popup-header">
+        <span class="popup-id">Incident #${inc.incident_id || inc.id}</span>
+        <span class="badge badge-${inc.priority ? inc.priority.toLowerCase() : 'med'}">${inc.priority || 'MEDIUM'}</span>
+      </div>
+      <div class="popup-title">${inc.infrastructure_type}</div>
+      <div class="popup-meta">
+        <div>Risk Score: <b style="color: ${priColor}; font-weight: 700;">${inc.risk_score}/100</b></div>
+        <div>Priority: <b style="color: ${priColor};">${inc.priority}</b></div>
+        <div>Location: <b>${locStr}</b></div>
+        <div>Status: <b>${statusDisplay}</b></div>
+      </div>
+      <button class="btn btn-sm btn-primary" style="width: 100%; justify-content: center;" onclick="openIncidentModal('${inc.id || inc.incident_id}')">View Details</button>
+    </div>
+  `;
+}
+
+function createCrewPopupContent(team) {
+  const isAvail = team.availability === 'AVAILABLE';
+  const statusColor = isAvail ? 'var(--low)' : 'var(--high)';
+  return `
+    <div class="map-popup-card">
+      <div class="popup-header">
+        <span class="popup-id">🔵 Maintenance Crew</span>
+        <span class="status-tag" style="color: ${statusColor}; font-weight: 600;">${team.availability}</span>
+      </div>
+      <div class="popup-title">${team.name}</div>
+      <div class="popup-meta">
+        <div>Specialization: <b>${team.specialization}</b></div>
+        <div>Current Workload: <b>${team.current_workload} active jobs</b></div>
+        <div>Base / Area: <b>${team.current_area || 'Central Depot'}</b></div>
+        <div>Equipment: <b>${team.equipment || 'Standard Kit'}</b></div>
+      </div>
+      <button class="btn btn-sm" style="width: 100%; justify-content: center;" onclick="switchView('teams')">Manage Crew</button>
+    </div>
+  `;
+}
+
+function centerMapOnIncidents(mapInstance) {
+  if (!mapInstance) return;
+  const validPoints = incidents
+    .filter(i => i.latitude && i.longitude && !isNaN(Number(i.latitude)) && !isNaN(Number(i.longitude)))
+    .map(i => [Number(i.latitude), Number(i.longitude)]);
+
+  if (validPoints.length > 0) {
+    const bounds = L.latLngBounds(validPoints);
+    mapInstance.fitBounds(bounds, { padding: [45, 45], maxZoom: 15 });
+  } else {
+    mapInstance.setView(CITY_CENTER, 13);
+  }
+}
+
+function toggleRiskHeatmap() {
+  isHeatmapActive = !isHeatmapActive;
+  const label = isHeatmapActive ? 'Incident Markers' : 'Risk Density';
+  const btn1 = document.getElementById('btn-toggle-heatmap');
+  const btn2 = document.getElementById('btn-full-heatmap');
+  if (btn1) btn1.textContent = label;
+  if (btn2) btn2.textContent = label;
+
+  renderOverviewMap();
+  renderFullMap();
+}
+
+function renderOverviewMap() {
+  if (!overviewMap) return;
+
+  // Clear existing layers
+  overviewClusterGroup.clearLayers();
+  overviewCrewLayer.clearLayers();
+  if (overviewHeatLayer) {
+    overviewMap.removeLayer(overviewHeatLayer);
+    overviewHeatLayer = null;
+  }
+
+  // 1. Heatmap Mode
+  if (isHeatmapActive) {
+    if (overviewMap.hasLayer(overviewClusterGroup)) overviewMap.removeLayer(overviewClusterGroup);
+
+    const heatPoints = incidents
+      .filter(i => i.latitude && i.longitude && !isNaN(Number(i.latitude)))
+      .map(i => [
+        Number(i.latitude),
+        Number(i.longitude),
+        Math.max(0.2, (Number(i.risk_score) || 50) / 100)
+      ]);
+
+    if (heatPoints.length > 0) {
+      overviewHeatLayer = L.heatLayer(heatPoints, {
+        radius: 30,
+        blur: 20,
+        maxZoom: 16,
+        gradient: { 0.2: '#10b981', 0.5: '#eab308', 0.75: '#f97316', 1.0: '#ef4444' }
+      }).addTo(overviewMap);
+    }
+    return;
+  }
+
+  // 2. Incident Markers & Clustering Mode
+  if (!overviewMap.hasLayer(overviewClusterGroup)) {
+    overviewMap.addLayer(overviewClusterGroup);
+  }
+
+  incidents.forEach(inc => {
+    if (!inc.latitude || !inc.longitude || isNaN(Number(inc.latitude))) return;
+    const m = L.marker([Number(inc.latitude), Number(inc.longitude)], {
+      icon: createIncidentMarkerIcon(inc)
+    });
+    m.bindPopup(createIncidentPopupContent(inc));
+    overviewClusterGroup.addLayer(m);
+  });
+
+  // 3. Maintenance Crew Markers
+  teams.forEach(t => {
+    if (!t.latitude || !t.longitude || isNaN(Number(t.latitude))) return;
+    const cm = L.marker([Number(t.latitude), Number(t.longitude)], {
+      icon: createCrewMarkerIcon(t)
+    });
+    cm.bindPopup(createCrewPopupContent(t));
+    overviewCrewLayer.addLayer(cm);
+  });
+}
+
+function renderFullMap() {
+  if (!fullMap) return;
+
+  fullClusterGroup.clearLayers();
+  fullCrewLayer.clearLayers();
+  if (fullHeatLayer) {
+    fullMap.removeLayer(fullHeatLayer);
+    fullHeatLayer = null;
+  }
+
+  // 1. Heatmap Mode
+  if (isHeatmapActive) {
+    if (fullMap.hasLayer(fullClusterGroup)) fullMap.removeLayer(fullClusterGroup);
+
+    const heatPoints = incidents
+      .filter(i => i.latitude && i.longitude && !isNaN(Number(i.latitude)))
+      .map(i => [
+        Number(i.latitude),
+        Number(i.longitude),
+        Math.max(0.2, (Number(i.risk_score) || 50) / 100)
+      ]);
+
+    if (heatPoints.length > 0) {
+      fullHeatLayer = L.heatLayer(heatPoints, {
+        radius: 34,
+        blur: 22,
+        maxZoom: 16,
+        gradient: { 0.2: '#10b981', 0.5: '#eab308', 0.75: '#f97316', 1.0: '#ef4444' }
+      }).addTo(fullMap);
+    }
+    return;
+  }
+
+  // 2. Incident Markers Mode
+  const useClusters = document.getElementById('chk-show-clusters')?.checked ?? true;
+
+  if (useClusters) {
+    if (!fullMap.hasLayer(fullClusterGroup)) fullMap.addLayer(fullClusterGroup);
+    incidents.forEach(inc => {
+      if (!inc.latitude || !inc.longitude || isNaN(Number(inc.latitude))) return;
+      const m = L.marker([Number(inc.latitude), Number(inc.longitude)], {
+        icon: createIncidentMarkerIcon(inc)
+      });
+      m.bindPopup(createIncidentPopupContent(inc));
+      fullClusterGroup.addLayer(m);
+    });
+  } else {
+    if (fullMap.hasLayer(fullClusterGroup)) fullMap.removeLayer(fullClusterGroup);
+    incidents.forEach(inc => {
+      if (!inc.latitude || !inc.longitude || isNaN(Number(inc.latitude))) return;
+      const m = L.marker([Number(inc.latitude), Number(inc.longitude)], {
+        icon: createIncidentMarkerIcon(inc)
+      }).addTo(fullMap);
+      m.bindPopup(createIncidentPopupContent(inc));
+    });
+  }
+
+  // 3. Maintenance Crew Markers
+  const showCrews = document.getElementById('chk-show-crews')?.checked ?? true;
+  if (showCrews) {
+    teams.forEach(t => {
+      if (!t.latitude || !t.longitude || isNaN(Number(t.latitude))) return;
+      const cm = L.marker([Number(t.latitude), Number(t.longitude)], {
+        icon: createCrewMarkerIcon(t)
+      });
+      cm.bindPopup(createCrewPopupContent(t));
+      fullCrewLayer.addLayer(cm);
+    });
+    if (!fullMap.hasLayer(fullCrewLayer)) fullMap.addLayer(fullCrewLayer);
+  } else {
+    if (fullMap.hasLayer(fullCrewLayer)) fullMap.removeLayer(fullCrewLayer);
+  }
+}
+
+/* ============================================================
+   VIEWS & RENDERERS
+   ============================================================ */
+function renderOverviewQueue() {
+  const container = document.getElementById('overview-queue-list');
+  const sorted = [...incidents]
+    .filter(i => i.status !== 'repaired')
+    .sort((a, b) => b.risk_score - a.risk_score)
+    .slice(0, 8);
+
+  container.innerHTML = sorted.map(i => {
+    const dotColor = getPriorityColor(i.priority);
+    return `
+      <div class="queue-item" onclick="openIncidentModal('${i.id}')">
+        <div class="dot" style="background: ${dotColor};"></div>
+        <div class="mono" style="font-weight: 600; font-size: 11px;">#${i.incident_id || i.id}</div>
+        <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          <b style="color: var(--text-primary);">${i.infrastructure_type}</b>
+          <span style="color: var(--text-muted); font-size: 11px;"> · ${i.address ? i.address.split(',')[0] : ''}</span>
+        </div>
+        <div class="mono heading" style="color: ${dotColor}; font-weight: 700; font-size: 14px; text-align: right;">${i.risk_score}</div>
+        <div style="text-align: right;">
+          <button class="btn btn-sm" onclick="event.stopPropagation(); openIncidentModal('${i.id}')">Dispatch</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderOverviewTeams() {
+  const tbody = document.getElementById('overview-teams-tbody');
+  tbody.innerHTML = teams.slice(0, 5).map(t => `
+    <tr>
+      <td><b>${t.name}</b></td>
+      <td style="color: var(--text-muted);">${t.specialization}</td>
+      <td>
+        <span class="status-tag" style="${t.availability === 'AVAILABLE' ? 'color: var(--low);' : t.availability === 'BUSY' ? 'color: var(--crit);' : 'color: var(--high);'}">
+          ${t.availability}
+        </span>
+      </td>
+      <td class="mono">${t.current_workload} active</td>
+    </tr>
+  `).join('');
+}
+
+function renderTypeBreakdown() {
+  const container = document.getElementById('type-breakdown-container');
+  const counts = {};
+  incidents.forEach(i => {
+    counts[i.infrastructure_type] = (counts[i.infrastructure_type] || 0) + 1;
+  });
+
+  const total = incidents.length || 1;
+  container.innerHTML = Object.entries(counts).map(([type, count]) => {
+    const pct = Math.round((count / total) * 100);
+    return `
+      <div class="factor-bar">
+        <div class="factor-info">
+          <span>${type}</span>
+          <span class="mono">${count} (${pct}%)</span>
+        </div>
+        <div class="factor-track">
+          <div class="factor-fill" style="width: ${pct}%;"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderQueueTable() {
+  const tbody = document.getElementById('queue-full-tbody');
+  const sorted = [...incidents]
+    .filter(i => i.status !== 'repaired')
+    .sort((a, b) => b.risk_score - a.risk_score);
+
+  tbody.innerHTML = sorted.map(i => `
+    <tr onclick="openIncidentModal('${i.id}')">
+      <td class="mono">#${i.incident_id || i.id}</td>
+      <td><b>${i.infrastructure_type}</b></td>
+      <td>${i.address || `${i.latitude.toFixed(4)}, ${i.longitude.toFixed(4)}`}</td>
+      <td class="mono" style="color: ${getPriorityColor(i.priority)}; font-weight: 700; font-size: 14px;">${i.risk_score}</td>
+      <td><span class="badge badge-${i.priority.toLowerCase()}">${i.priority}</span></td>
+      <td class="mono">${Math.round((i.detection_confidence || 0.85) * 100)}%</td>
+      <td class="mono">${i.report_count || 1} reports</td>
+      <td class="mono" style="font-size: 11px;">${calculateRemainingSLA(i.sla_deadline)}</td>
+      <td>${i.assigned_team?.name || '<span style="color: var(--high);">Unassigned</span>'}</td>
+      <td><span class="status-tag">${i.status}</span></td>
+      <td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); openIncidentModal('${i.id}')">Dispatch</button></td>
+    </tr>
+  `).join('');
+}
+
+function renderAllIncidentsTable() {
+  const tbody = document.getElementById('all-incidents-tbody');
+  tbody.innerHTML = incidents.map(i => `
+    <tr onclick="openIncidentModal('${i.id}')">
+      <td class="mono">#${i.incident_id || i.id}</td>
+      <td><b>${i.infrastructure_type}</b></td>
+      <td>${i.address || `${i.latitude.toFixed(4)}, ${i.longitude.toFixed(4)}`}</td>
+      <td class="mono" style="color: ${getPriorityColor(i.priority)}; font-weight: 700;">${i.risk_score}</td>
+      <td><span class="badge badge-${i.priority.toLowerCase()}">${i.priority}</span></td>
+      <td style="color: var(--text-muted); font-size: 11px;">${i.source}</td>
+      <td><span class="badge badge-${i.verification_status === 'VERIFIED' ? 'low' : 'med'}">${i.verification_status}</span></td>
+      <td>${i.assigned_team?.name || '—'}</td>
+      <td><span class="status-tag">${i.status}</span></td>
+      <td><button class="btn btn-sm" onclick="event.stopPropagation(); openIncidentModal('${i.id}')">View</button></td>
+    </tr>
+  `).join('');
+}
+
+function renderTeamsView() {
+  const grid = document.getElementById('teams-cards-grid');
+  grid.innerHTML = teams.map(t => `
+    <div class="section-card" style="padding: 14px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+        <div>
+          <b style="font-size: 14px;">${t.name}</b>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${t.specialization}</div>
+        </div>
+        <span class="status-tag" style="${t.availability === 'AVAILABLE' ? 'color: var(--low);' : t.availability === 'BUSY' ? 'color: var(--crit);' : 'color: var(--high);'}">
+          ${t.availability}
+        </span>
+      </div>
+
+      <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 10px;">
+        <div>Workload: <b class="mono">${t.current_workload} Active Work Orders</b></div>
+        <div>Equipment: ${t.equipment}</div>
+        <div>Depot: ${t.current_area}</div>
+      </div>
+
+      <div style="margin-top: auto; padding-top: 8px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+        <span class="mono" style="font-size: 10px; color: var(--text-muted);">${t.contact_phone}</span>
+        <button class="btn btn-sm" onclick="switchView('priority-queue')">Assign Jobs</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderAnalytics(data) {
+  if (!data) return;
+  document.getElementById('ana-avg-response').textContent = data.kpis.average_response_time;
+  document.getElementById('ana-res-rate').textContent = data.kpis.resolution_rate;
+
+  const priContainer = document.getElementById('analytics-priority-chart');
+  const pri = data.by_priority || {};
+  priContainer.innerHTML = Object.entries(pri).map(([p, count]) => `
+    <div class="factor-bar">
+      <div class="factor-info">
+        <span style="color: ${getPriorityColor(p)}; font-weight: 600;">${p}</span>
+        <span class="mono">${count}</span>
+      </div>
+      <div class="factor-track">
+        <div class="factor-fill" style="width: ${(count / incidents.length) * 100}%; background: ${getPriorityColor(p)};"></div>
+      </div>
+    </div>
+  `).join('');
+
+  const hotContainer = document.getElementById('analytics-hotspots-container');
+  hotContainer.innerHTML = `
+    <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+      <p>• <b>Statue Junction &amp; MG Road Corridor</b>: 4 recurring defects (Asphalt compaction fatigue near hospital transit zone)</p>
+      <p style="margin-top: 6px;">• <b>NH 66 Technopark Bypass</b>: 3 road cracks &amp; depression clusters under heavy container transit</p>
+      <p style="margin-top: 6px;">• <b>Thiruvallam Sluice Road</b>: Low lying culvert susceptible to seasonal waterlogging</p>
+    </div>
+  `;
+}
+
+function calculateRemainingSLA(deadlineStr) {
+  if (!deadlineStr) return '—';
+  const diffMs = new Date(deadlineStr).getTime() - Date.now();
+  if (diffMs <= 0) return '<span style="color: var(--crit); font-weight: 700;">BREACHED</span>';
+  const hours = Math.floor(diffMs / (3600 * 1000));
+  const mins = Math.floor((diffMs % (3600 * 1000)) / (60 * 1000));
+  return `${hours}h ${mins}m`;
+}
+
+/* ============================================================
+   MODAL & DISPATCH ACTIONS
+   ============================================================ */
+async function openIncidentModal(id) {
+  const inc = incidents.find(i => String(i.id) === String(id) || String(i.incident_id) === String(id));
+  if (!inc) return;
+  activeIncident = inc;
+
+  document.getElementById('modal-title').textContent = `INCIDENT #${inc.incident_id || inc.id}`;
+  document.getElementById('modal-type-tag').textContent = inc.infrastructure_type;
+  document.getElementById('modal-address').textContent = inc.address || 'Location Coordinates Tagged';
+  document.getElementById('modal-coords').textContent = `${inc.latitude.toFixed(5)}, ${inc.longitude.toFixed(5)}`;
+
+  const priBadge = document.getElementById('modal-priority-badge');
+  priBadge.textContent = inc.priority;
+  priBadge.className = `badge badge-${inc.priority.toLowerCase()}`;
+
+  document.getElementById('modal-confidence-label').textContent = `Confidence ${Math.round((inc.detection_confidence || 0.85) * 100)}%`;
+  document.getElementById('modal-evidence-img').src = inc.image_evidence || 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=600&auto=format&fit=crop&q=80';
+
+  const vStatus = document.getElementById('modal-verification-status');
+  vStatus.textContent = inc.verification_status || 'VERIFIED';
+  vStatus.className = `badge badge-${inc.verification_status === 'VERIFIED' ? 'low' : 'med'}`;
+  document.getElementById('modal-verification-reason').textContent = inc.verification_reason || 'Multi-frame tracking confirmed spatial consistency.';
+
+  // Deduplication
+  document.getElementById('modal-dedup-summary').textContent = `${inc.report_count || 1} reports merged into Incident #${inc.incident_id || inc.id}`;
+  const lrList = document.getElementById('modal-linked-reports');
+  lrList.innerHTML = (inc.linked_reports || []).map((r, idx) => `
+    <div>• Report #${idx+1} via ${r.vehicle_id || 'fleet'} (${r.severity}) · Depth: ${r.est_depth_cm || 0}cm</div>
+  `).join('') || '<div>• Initial detection</div>';
+
+  // Risk Score & Factors
+  document.getElementById('modal-risk-score').textContent = `${inc.risk_score} / 100`;
+  const f = inc.risk_factors || {};
+  document.getElementById('fact-sev').textContent = f.severity ?? 88;
+  document.getElementById('bar-sev').style.width = `${f.severity ?? 88}%`;
+  document.getElementById('fact-traf').textContent = f.traffic ?? 94;
+  document.getElementById('bar-traf').style.width = `${f.traffic ?? 94}%`;
+  document.getElementById('fact-ped').textContent = f.pedestrian ?? 81;
+  document.getElementById('bar-ped').style.width = `${f.pedestrian ?? 81}%`;
+  document.getElementById('fact-loc').textContent = f.location ?? 92;
+  document.getElementById('bar-loc').style.width = `${f.location ?? 92}%`;
+  document.getElementById('fact-comp').textContent = f.complaints ?? 76;
+  document.getElementById('bar-comp').style.width = `${f.complaints ?? 76}%`;
+
+  document.getElementById('modal-location-reason').textContent = inc.location_context?.explanation || 'High traffic density and road surface damage.';
+
+  // Predictive Deterioration
+  const p = inc.deterioration_projection || {};
+  document.getElementById('pred-current').textContent = inc.risk_score;
+  document.getElementById('pred-7day').textContent = p.projected_7_day_risk || inc.risk_score + 4;
+  document.getElementById('pred-30day').textContent = p.projected_30_day_risk || Math.min(100, inc.risk_score + 14);
+
+  // Team Dispatch Recommendation
+  const recBox = document.getElementById('modal-recommended-team-box');
+  recBox.innerHTML = '<div style="font-size: 11px; color: var(--text-muted);">Calculating optimal crew routing...</div>';
+
+  try {
+    const recRes = await fetch(`/api/incidents/${inc.id}/recommend-team`);
+    const recData = await recRes.json();
+    const topTeam = recData.recommended_team;
+
+    if (topTeam) {
+      recBox.innerHTML = `
+        <div style="font-size: 12px; margin-bottom: 4px;">
+          <b>${topTeam.name}</b> (${topTeam.specialization})
+        </div>
+        <div style="font-size: 11px; color: var(--text-secondary); display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px;">
+          <div>Distance: <b>${topTeam.distance_km} km</b></div>
+          <div>ETA: <b>${topTeam.eta}</b></div>
+          <div>Status: <b>${topTeam.availability}</b></div>
+          <div>Active Jobs: <b>${topTeam.current_workload}</b></div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-sm btn-primary" onclick="assignTeam('${inc.id}', '${topTeam.team_id}')">
+            Dispatch Recommended Crew
+          </button>
+          <select class="select-filter" style="font-size: 11px; padding: 3px;" onchange="if(this.value) assignTeam('${inc.id}', this.value)">
+            <option value="">Manual Override...</option>
+            ${teams.map(t => `<option value="${t.team_id}">${t.name} (${t.availability})</option>`).join('')}
+          </select>
+        </div>
+      `;
+    }
+  } catch (e) {
+    recBox.innerHTML = '<div style="font-size: 11px; color: var(--crit);">Could not fetch dispatch recommendation</div>';
+  }
+
+  document.getElementById('incident-modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('incident-modal').classList.remove('open');
+  activeIncident = null;
+}
+
+async function assignTeam(incidentId, teamId) {
+  try {
+    const res = await fetch(`/api/incidents/${incidentId}/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ team_id: teamId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      await refreshData();
+      openIncidentModal(incidentId);
+    }
+  } catch (e) {
+    alert('Failed to assign crew.');
+  }
+}
+
+document.getElementById('btn-modal-progress').addEventListener('click', async () => {
+  if (!activeIncident) return;
+  await fetch(`/api/detections/${activeIncident.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'in_progress' })
+  });
+  await refreshData();
+  openIncidentModal(activeIncident.id);
+});
+
+document.getElementById('btn-modal-verify-repair').addEventListener('click', async () => {
+  if (!activeIncident) return;
+  try {
+    const res = await fetch(`/api/incidents/${activeIncident.id}/verify-repair`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        afterImageRef: 'https://images.unsplash.com/photo-1541888946425-d0fbb186c5f9?w=600&auto=format&fit=crop&q=80',
+        technicianNotes: 'Asphalt compaction and seal coat applied.',
+        qualityCheckSimulated: 'pass'
+      })
+    });
+    const data = await res.json();
+    alert(`Repair Verified! Verification Score: ${data.result.verification_score}/100\nStatus: ${data.result.repair_status}`);
+    closeModal();
+    await refreshData();
+  } catch (e) {
+    alert('Verification process failed');
+  }
+});
+
+/* ============================================================
+   AI ASSISTANT
+   ============================================================ */
+async function askAssistant(question) {
+  const chat = document.getElementById('chat-messages');
+  chat.innerHTML += `<div class="chat-msg user">${question}</div>`;
+  chat.scrollTop = chat.scrollHeight;
+
+  try {
+    const res = await fetch('/api/assistant/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question })
+    });
+    const data = await res.json();
+    const formatted = data.answer.replace(/\n/g, '<br/>').replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+    chat.innerHTML += `<div class="chat-msg bot">${formatted}</div>`;
+    chat.scrollTop = chat.scrollHeight;
+  } catch (e) {
+    chat.innerHTML += `<div class="chat-msg bot" style="color: var(--crit);">Unable to reach assistant engine.</div>`;
+  }
+}
+
+document.getElementById('assistant-send-btn').addEventListener('click', () => {
+  const input = document.getElementById('assistant-input');
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = '';
+  askAssistant(q);
+});
+
+document.getElementById('assistant-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    document.getElementById('assistant-send-btn').click();
+  }
+});
+
+/* ============================================================
+   SIMULATOR TELEMETRY
+   ============================================================ */
+document.getElementById('btn-quick-ping').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-quick-ping');
+  btn.textContent = 'Simulating...';
+  try {
+    await fetch('/api/simulate/fleet', { method: 'POST' });
+    await refreshData();
+    setTimeout(() => {
+      btn.textContent = 'Simulate Detection';
+    }, 500);
+  } catch (e) {
+    btn.textContent = 'Simulate Detection';
+  }
+});
+
+/* ============================================================
+   LIVE AI COMPUTER VISION & CAMERA ENGINE
+   ============================================================ */
+let activeStream = null;
+let isLiveStreaming = false;
+let liveInferenceTimer = null;
+let isFrameInferencing = false;
+let framesProcessedCount = 0;
+let liveDetections = [];
+let liveTrackedObjects = [];
+let activeSourceType = 'OFFLINE';
+let lastLatency = 0;
+let lastInferenceTimestamp = 0;
+let rollingFps = 0;
+let latestCapturedFrameData = null;
+let latestCreatedIncidentId = null;
+
+const liveVideo = document.getElementById('live-video');
+const liveCanvas = document.getElementById('live-overlay-canvas');
+const liveCtx = liveCanvas ? liveCanvas.getContext('2d') : null;
+const offCanvas = document.createElement('canvas');
+const offCtx = offCanvas.getContext('2d');
+
+function updateLiveHUD(status, sourceType) {
+  activeSourceType = sourceType;
+  const isOnline = status === 'LIVE';
+  
+  // Header dot
+  const headerDot = document.getElementById('live-ai-header-dot');
+  if (headerDot) {
+    headerDot.className = isOnline ? 'live-dot active' : 'live-dot';
+  }
+
+  // Source badges
+  const srcBadge = document.getElementById('live-source-badge');
+  if (srcBadge) srcBadge.textContent = `Source: ${sourceType}`;
+
+  // Video HUD
+  const hudDot = document.getElementById('hud-live-dot');
+  const hudTxt = document.getElementById('hud-status-text');
+  const hudType = document.getElementById('hud-stream-type');
+  if (hudDot && hudTxt && hudType) {
+    hudDot.className = isOnline ? 'live-dot active' : 'live-dot';
+    hudTxt.textContent = isOnline ? 'LIVE' : 'OFFLINE';
+    hudType.textContent = isOnline ? sourceType.toUpperCase() : 'NO FEED';
+  }
+
+  // Right Panel
+  const panelDot = document.getElementById('panel-status-dot');
+  const panelTxt = document.getElementById('panel-status-text');
+  if (panelDot && panelTxt) {
+    panelDot.className = isOnline ? 'live-dot active' : 'live-dot';
+    panelTxt.textContent = isOnline ? '● LIVE' : '○ OFFLINE';
+    panelTxt.style.color = isOnline ? 'var(--low)' : 'var(--text-muted)';
+  }
+
+  // Toggle standby screen
+  const standbyScreen = document.getElementById('camera-standby-screen');
+  const startBtn = document.getElementById('btn-start-camera');
+  const stopBtn = document.getElementById('btn-stop-camera');
+  if (standbyScreen) standbyScreen.style.display = isOnline ? 'none' : 'flex';
+  if (startBtn && stopBtn) {
+    startBtn.style.display = isOnline ? 'none' : 'inline-flex';
+    stopBtn.style.display = isOnline ? 'inline-flex' : 'none';
+  }
+}
+
+// 1. Start Webcam (Browser mediaDevices API with permission handling)
+async function startWebcam() {
+  stopCurrentStream();
+  document.getElementById('camera-perm-alert').style.display = 'none';
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    document.getElementById('camera-perm-alert').style.display = 'block';
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        facingMode: 'environment'
+      },
+      audio: false
+    });
+
+    activeStream = stream;
+    liveVideo.srcObject = stream;
+    liveVideo.src = '';
+    await liveVideo.play();
+    isLiveStreaming = true;
+    updateLiveHUD('LIVE', 'Webcam');
+    startInferenceLoop();
+    startCanvasRenderLoop();
+  } catch (err) {
+    console.error('Camera permission or device access failed:', err);
+    document.getElementById('camera-perm-alert').style.display = 'block';
+    stopCurrentStream();
+  }
+}
+
+// 2. Play Sample Video (/samples/pothole_sample.mp4)
+function startSampleVideo() {
+  stopCurrentStream();
+  document.getElementById('camera-perm-alert').style.display = 'none';
+
+  liveVideo.srcObject = null;
+  liveVideo.src = '/samples/pothole_sample.mp4';
+  liveVideo.loop = true;
+  liveVideo.play().then(() => {
+    isLiveStreaming = true;
+    updateLiveHUD('LIVE', 'Sample Video');
+    startInferenceLoop();
+    startCanvasRenderLoop();
+  }).catch(err => {
+    console.warn('Sample video play error:', err);
+  });
+}
+
+// 3. User Uploaded Video
+function handleFileSelect(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+
+  stopCurrentStream();
+  document.getElementById('camera-perm-alert').style.display = 'none';
+
+  const fileUrl = URL.createObjectURL(file);
+  liveVideo.srcObject = null;
+  liveVideo.src = fileUrl;
+  liveVideo.loop = true;
+  liveVideo.play().then(() => {
+    isLiveStreaming = true;
+    updateLiveHUD('LIVE', `File: ${file.name.slice(0, 16)}`);
+    startInferenceLoop();
+    startCanvasRenderLoop();
+  }).catch(err => {
+    console.warn('Uploaded file play error:', err);
+  });
+}
+
+// 4. Sample Still Frame (/samples/annotated.jpg)
+function startSampleImage() {
+  stopCurrentStream();
+  document.getElementById('camera-perm-alert').style.display = 'none';
+
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = async () => {
+    offCanvas.width = img.naturalWidth || 576;
+    offCanvas.height = img.naturalHeight || 314;
+    offCtx.drawImage(img, 0, 0, offCanvas.width, offCanvas.height);
+    const frameData = offCanvas.toDataURL('image/jpeg', 0.8);
+    latestCapturedFrameData = frameData;
+
+    liveVideo.srcObject = null;
+    liveVideo.src = '';
+    isLiveStreaming = true;
+    updateLiveHUD('LIVE', 'Sample Still');
+
+    // Run inference step immediately
+    await executeInferenceStep(frameData, offCanvas.width, offCanvas.height);
+    startCanvasRenderLoop();
+  };
+  img.src = '/samples/annotated.jpg';
+}
+
+// 5. Connect IP Camera / Stream URL
+function connectIpCamera() {
+  const input = document.getElementById('ip-camera-url');
+  let url = input.value.trim();
+  if (!url) {
+    url = '/samples/pothole_sample.mp4';
+    input.value = url;
+  }
+
+  stopCurrentStream();
+  document.getElementById('camera-perm-alert').style.display = 'none';
+
+  liveVideo.srcObject = null;
+  liveVideo.src = url;
+  liveVideo.loop = true;
+  liveVideo.play().then(() => {
+    isLiveStreaming = true;
+    updateLiveHUD('LIVE', 'IP Camera Stream');
+    startInferenceLoop();
+    startCanvasRenderLoop();
+  }).catch(err => {
+    alert(`Could not load stream URL: ${err.message}`);
+    stopCurrentStream();
+  });
+}
+
+// Stop current stream
+function stopCurrentStream() {
+  if (activeStream) {
+    activeStream.getTracks().forEach(track => track.stop());
+    activeStream = null;
+  }
+  if (liveInferenceTimer) {
+    clearInterval(liveInferenceTimer);
+    liveInferenceTimer = null;
+  }
+  isLiveStreaming = false;
+  if (liveVideo) liveVideo.pause();
+  liveDetections = [];
+  liveTrackedObjects = [];
+  renderBoundingBoxes();
+  renderDetectionCards();
+  updateLiveHUD('OFFLINE', 'Offline');
+}
+
+// Inference loop: runs at 6-8 FPS (every 140ms) to ensure responsive rendering without freezing
+function startInferenceLoop() {
+  if (liveInferenceTimer) clearInterval(liveInferenceTimer);
+  liveInferenceTimer = setInterval(async () => {
+    if (!isLiveStreaming || liveVideo.paused || liveVideo.ended || isFrameInferencing) return;
+    if (!liveVideo.videoWidth || !liveVideo.videoHeight) return;
+
+    isFrameInferencing = true;
+    const t0 = performance.now();
+
+    // Resize offscreen canvas to standard 576 width matching YOLO pipeline
+    const targetW = 576;
+    const targetH = Math.round((576 / liveVideo.videoWidth) * liveVideo.videoHeight) || 314;
+    offCanvas.width = targetW;
+    offCanvas.height = targetH;
+    offCtx.drawImage(liveVideo, 0, 0, targetW, targetH);
+
+    const frameData = offCanvas.toDataURL('image/jpeg', 0.72);
+    latestCapturedFrameData = frameData;
+
+    await executeInferenceStep(frameData, targetW, targetH, t0);
+    isFrameInferencing = false;
+  }, 140);
+}
+
+async function executeInferenceStep(frameData, frameW, frameH, t0 = performance.now()) {
+  try {
+    const res = await fetch('/api/detection/infer-frame', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        frameData,
+        autoTrack: true,
+      })
+    });
+
+    const data = await res.json();
+    const dt = Math.round(performance.now() - t0);
+    lastLatency = dt;
+
+    // Rolling FPS calculation
+    const now = performance.now();
+    if (lastInferenceTimestamp > 0) {
+      const instantFps = 1000 / Math.max(1, now - lastInferenceTimestamp);
+      rollingFps = Math.round(rollingFps ? rollingFps * 0.7 + instantFps * 0.3 : instantFps);
+    }
+    lastInferenceTimestamp = now;
+
+    if (data.success) {
+      framesProcessedCount++;
+      liveDetections = data.detections || [];
+      liveTrackedObjects = data.tracked_objects || [];
+      
+      // Update telemetry badges
+      document.getElementById('hud-latency').textContent = `Latency: ${data.latency_ms || dt}ms`;
+      document.getElementById('hud-fps').textContent = `${rollingFps} FPS`;
+      document.getElementById('panel-latency').textContent = `${data.latency_ms || dt} ms`;
+      document.getElementById('panel-fps').textContent = `${rollingFps} FPS`;
+      document.getElementById('panel-frames').textContent = framesProcessedCount;
+      document.getElementById('panel-objects').textContent = liveDetections.length;
+
+      renderDetectionCards();
+
+      // Check auto-created incidents
+      const autoCreateChecked = document.getElementById('auto-create-incidents-chk')?.checked;
+      const verifiedTrack = liveTrackedObjects.find(t => t.verification_status === 'VERIFIED' && t.incident_id);
+      if (verifiedTrack && autoCreateChecked) {
+        showLinkedIncidentBanner(verifiedTrack.incident_id, `Verified defect #${verifiedTrack.incident_id} created in Priority Queue with 100% temporal confidence.`);
+        refreshData();
+      }
+    }
+  } catch (err) {
+    console.warn('Live inference step error:', err);
+  }
+}
+
+// Overlay render loop: redraws canvas at display resolution
+function startCanvasRenderLoop() {
+  function loop() {
+    if (isLiveStreaming) {
+      renderBoundingBoxes();
+      requestAnimationFrame(loop);
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+function renderBoundingBoxes() {
+  const container = document.getElementById('video-viewport');
+  if (!container || !liveCanvas || !liveCtx) return;
+
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  if (liveCanvas.width !== w || liveCanvas.height !== h) {
+    liveCanvas.width = w;
+    liveCanvas.height = h;
+  }
+
+  liveCtx.clearRect(0, 0, w, h);
+  if (!isLiveStreaming || liveDetections.length === 0) return;
+
+  // Compute letterbox / aspect-fit offsets between video frame and viewport
+  const vidW = liveVideo.videoWidth || 576;
+  const vidH = liveVideo.videoHeight || 314;
+  const scale = Math.min(w / vidW, h / vidH);
+  const displayW = vidW * scale;
+  const displayH = vidH * scale;
+  const offsetX = (w - displayW) / 2;
+  const offsetY = (h - displayH) / 2;
+
+  // The model's coordinate frame is 576 x 314
+  const normX = displayW / 576;
+  const normY = displayH / 314;
+
+  liveDetections.forEach((det, idx) => {
+    const [bx, by, bw, bh] = det.bbox;
+    const drawX = Math.round(offsetX + bx * normX);
+    const drawY = Math.round(offsetY + by * normY);
+    const drawW = Math.round(bw * normX);
+    const drawH = Math.round(bh * normY);
+
+    const isSevere = det.severity === 'severe';
+    const isModerate = det.severity === 'moderate';
+    const color = isSevere ? '#ef4444' : isModerate ? '#f97316' : '#eab308';
+
+    // Bounding Box
+    liveCtx.strokeStyle = color;
+    liveCtx.lineWidth = 2.5;
+    liveCtx.strokeRect(drawX, drawY, drawW, drawH);
+
+    // Corner brackets
+    const corner = Math.min(10, drawW / 4, drawH / 4);
+    liveCtx.lineWidth = 4;
+    // Top-left
+    liveCtx.beginPath();
+    liveCtx.moveTo(drawX, drawY + corner);
+    liveCtx.lineTo(drawX, drawY);
+    liveCtx.lineTo(drawX + corner, drawY);
+    liveCtx.stroke();
+
+    // Bottom-right
+    liveCtx.beginPath();
+    liveCtx.moveTo(drawX + drawW - corner, drawY + drawH);
+    liveCtx.lineTo(drawX + drawW, drawY + drawH);
+    liveCtx.lineTo(drawX + drawW, drawY + drawH - corner);
+    liveCtx.stroke();
+
+    // Label banner
+    const pct = Math.round(det.confidence * 100);
+    const label = `POTHOLE · ${pct}% · ${det.severity.toUpperCase()} · ${det.est_depth_cm}cm`;
+    liveCtx.font = '600 11px "IBM Plex Mono", monospace';
+    const textWidth = liveCtx.measureText(label).width;
+
+    liveCtx.fillStyle = color;
+    liveCtx.fillRect(drawX, Math.max(0, drawY - 20), textWidth + 12, 20);
+
+    liveCtx.fillStyle = '#0b0d11';
+    liveCtx.fillText(label, drawX + 6, Math.max(14, drawY - 6));
+  });
+}
+
+function renderDetectionCards() {
+  const list = document.getElementById('live-detections-list');
+  const badge = document.getElementById('detection-count-badge');
+  const empty = document.getElementById('no-detections-msg');
+  if (!list) return;
+
+  if (liveDetections.length === 0) {
+    if (badge) badge.style.display = 'none';
+    if (empty) empty.style.display = 'block';
+    list.innerHTML = '';
+    if (empty) list.appendChild(empty);
+    return;
+  }
+
+  if (badge) {
+    badge.style.display = 'inline-block';
+    badge.textContent = `${liveDetections.length} DETECTED`;
+  }
+  if (empty) empty.style.display = 'none';
+
+  list.innerHTML = liveDetections.map((det, idx) => {
+    const isSevere = det.severity === 'severe';
+    const isModerate = det.severity === 'moderate';
+    const pri = isSevere ? 'CRITICAL' : isModerate ? 'HIGH' : 'MEDIUM';
+    const color = isSevere ? 'var(--crit)' : isModerate ? 'var(--high)' : 'var(--med)';
+    const pct = Math.round(det.confidence * 100);
+    const riskScore = isSevere ? 88 : isModerate ? 68 : 48;
+    const track = liveTrackedObjects[idx] || {};
+    const trackFrames = track.frame_count || 1;
+    const isVerified = track.verification_status === 'VERIFIED' || trackFrames >= 3;
+
+    return `
+      <div style="background: var(--bg-surface-raised); border-radius: 4px; padding: 10px; border-left: 3px solid ${color};">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+          <div>
+            <b style="font-size: 13px; color: var(--text-primary);">${det.class.toUpperCase()}</b>
+            <span class="mono" style="font-size: 10px; color: var(--text-muted); margin-left: 4px;">#${det.track_id || `det-${idx+1}`}</span>
+          </div>
+          <span class="badge badge-${pri.toLowerCase()}">${det.severity.toUpperCase()}</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px; margin-bottom: 8px;">
+          <div>Confidence: <b class="mono">${pct}%</b></div>
+          <div>Depth: <b class="mono">${det.est_depth_cm} cm</b></div>
+          <div>Risk Score: <b class="mono" style="color: ${color};">${riskScore} / 100</b></div>
+          <div>Frames: <b class="mono">${trackFrames}/3 frames</b></div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 6px; border-top: 1px solid var(--border-subtle); font-size: 10px;">
+          <span style="color: ${isVerified ? 'var(--low)' : 'var(--text-muted)'}; font-weight: 600;">
+            ${isVerified ? '● TEMPORAL VERIFIED' : '○ TRACKING MULTI-FRAME...'}
+          </span>
+          <button class="btn btn-sm" onclick="captureSpecificDetection(${idx})">Capture Incident</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function showLinkedIncidentBanner(incidentId, desc) {
+  latestCreatedIncidentId = incidentId;
+  const banner = document.getElementById('linked-incident-banner');
+  const idEl = document.getElementById('linked-incident-id');
+  const descEl = document.getElementById('linked-incident-desc');
+  if (banner && idEl && descEl) {
+    idEl.textContent = `#${incidentId}`;
+    descEl.textContent = desc;
+    banner.style.display = 'block';
+  }
+}
+
+function openLinkedIncident() {
+  if (latestCreatedIncidentId) {
+    openIncidentModal(latestCreatedIncidentId);
+  }
+}
+
+async function captureCurrentIncident() {
+  if (!latestCapturedFrameData && !isLiveStreaming) {
+    alert('Please start camera or video first before capturing an incident.');
+    return;
+  }
+
+  // Draw current video frame to capture snapshot
+  if (liveVideo && liveVideo.videoWidth > 0) {
+    offCanvas.width = 576;
+    offCanvas.height = Math.round((576 / liveVideo.videoWidth) * liveVideo.videoHeight) || 314;
+    offCtx.drawImage(liveVideo, 0, 0, offCanvas.width, offCanvas.height);
+    latestCapturedFrameData = offCanvas.toDataURL('image/jpeg', 0.8);
+  }
+
+  const topDetection = liveDetections[0] || {
+    class: 'Pothole',
+    severity: 'severe',
+    est_depth_cm: 6.8,
+    confidence: 0.94
+  };
+
+  try {
+    const res = await fetch('/api/detection/capture-incident', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        frameData: latestCapturedFrameData,
+        detection: topDetection,
+        address: 'MG Road Urban Corridor (Live AI Optical Capture)'
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showLinkedIncidentBanner(data.incident.incident_id, `Incident #${data.incident.incident_id} captured and prioritized with Risk Score ${data.incident.risk_score}/100.`);
+      await refreshData();
+      alert(`Incident #${data.incident.incident_id} captured successfully! Assigned to Priority Dispatch Queue.`);
+    }
+  } catch (err) {
+    alert(`Capture failed: ${err.message}`);
+  }
+}
+
+async function captureSpecificDetection(index) {
+  const det = liveDetections[index] || liveDetections[0];
+  try {
+    const res = await fetch('/api/detection/capture-incident', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        frameData: latestCapturedFrameData,
+        detection: det,
+        address: 'MG Road Central (Camera Optical Capture)'
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showLinkedIncidentBanner(data.incident.incident_id, `Incident #${data.incident.incident_id} registered with Risk Score ${data.incident.risk_score}/100.`);
+      await refreshData();
+    }
+  } catch (err) {
+    alert(`Capture failed: ${err.message}`);
+  }
+}
+
+/* ============================================================
+   NAVIGATION & TABS
+   ============================================================ */
+function switchView(viewName) {
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.view === viewName);
+  });
+  document.querySelectorAll('.view-pane').forEach(el => {
+    el.classList.toggle('active', el.id === `pane-${viewName}`);
+  });
+
+  if (viewName === 'overview') {
+    setTimeout(() => overviewMap.invalidateSize(), 100);
+  } else if (viewName === 'map-view') {
+    setTimeout(() => fullMap.invalidateSize(), 100);
+  } else if (viewName === 'live-ai') {
+    setTimeout(() => renderBoundingBoxes(), 100);
+  }
+}
+
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    switchView(el.dataset.view);
+  });
+});
+
+// Run application
+initApp();
+</script>
+</body>
+</html>

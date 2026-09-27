@@ -1,0 +1,15 @@
+{
+  "name": "roadstate-pothole-monitor",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build": "node -e \"console.log('Build complete')\""
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "jpeg-js": "^0.4.4"
+  }
+}
